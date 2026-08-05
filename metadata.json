@@ -1,0 +1,6 @@
+{
+  "name": "LensForge",
+  "description": "Premium digital marketplace platform for templates, 3D SaaS assets, and dashboard UI kits.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
