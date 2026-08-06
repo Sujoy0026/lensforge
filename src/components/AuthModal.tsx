@@ -55,13 +55,13 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess, initialMode 
   };
 
   const handleAdminQuickFill = () => {
-    setEmail('admin@lensforge.com');
-    setPassword('admin123');
+    setEmail('sujoy.yt0077@gmail.com');
+    setPassword('sujoy7473');
     setIsSignUp(false);
   };
 
   const handleCustomerQuickFill = () => {
-    setEmail('sujoy.yt0077@gmail.com');
+    setEmail('customer@lensforge.com');
     setPassword('customer123');
     setIsSignUp(false);
   };

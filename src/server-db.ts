@@ -3,8 +3,28 @@ import path from 'path';
 import { Product, User, Order } from './types.js';
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
+import crypto from 'crypto';
+import bcrypt from 'bcryptjs';
 
 dotenv.config();
+
+export function hashPassword(password: string): string {
+  return bcrypt.hashSync(password, 10);
+}
+
+export function verifyPassword(password: string, hash: string): boolean {
+  if (!hash) return false;
+  try {
+    if (hash.startsWith('$2a$') || hash.startsWith('$2b$')) {
+      return bcrypt.compareSync(password, hash);
+    }
+  } catch (e) {
+    // Fallback to legacy check if bcrypt fails
+  }
+  const salt = 'lensforge_secure_salt_2026_prod';
+  const legacyHash = crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
+  return hash === legacyHash;
+}
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
@@ -68,8 +88,12 @@ CREATE TABLE IF NOT EXISTS public.users (
     id TEXT PRIMARY KEY,
     email TEXT UNIQUE NOT NULL,
     is_admin BOOLEAN DEFAULT false,
-    name TEXT
+    name TEXT,
+    password_hash TEXT
 );
+
+-- Note: If you already have a 'users' table created, run the following SQL command to add security:
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS password_hash TEXT;
 
 -- 2. Create 'products' table
 CREATE TABLE IF NOT EXISTS public.products (
@@ -217,11 +241,14 @@ export async function initDatabase() {
   let localDb = loadLocalDatabase();
   let localSaved = false;
 
-  if (localDb.users.length === 0) {
+  const hasLocalAdmin = localDb.users.some(u => u.email.toLowerCase() === 'sujoy.yt0077@gmail.com');
+  if (!hasLocalAdmin) {
     localDb.users.push({
-      id: 'admin-uuid',
-      email: 'admin@lensforge.com',
+      id: 'admin-uuid-sujoy',
+      email: 'sujoy.yt0077@gmail.com',
       is_admin: true,
+      name: 'Sujoy Admin',
+      password_hash: hashPassword('sujoy7473')
     });
     localSaved = true;
   }
@@ -253,15 +280,37 @@ export async function initDatabase() {
       const { data: users, error: usersErr } = await supabase.from('users').select('*');
       if (usersErr) {
         console.warn('[Supabase] Could not query "users" table. Please run migration schema in Supabase console:', usersErr.message);
-      } else if (users && users.length === 0) {
-        console.log('[Supabase] Seeding default admin user...');
-        const { error: seedUserErr } = await supabase.from('users').insert([
-          { id: 'admin-uuid', email: 'admin@lensforge.com', is_admin: true }
-        ]);
-        if (seedUserErr) {
-          console.error('[Supabase] Failed to seed default admin user:', seedUserErr.message);
-        } else {
-          console.log('[Supabase] Default admin user seeded successfully.');
+      } else {
+        const hasCloudAdmin = users && users.some((u: any) => u.email.toLowerCase() === 'sujoy.yt0077@gmail.com');
+        if (!hasCloudAdmin) {
+          console.log('[Supabase] Seeding default admin user: sujoy.yt0077@gmail.com...');
+          const adminPayload: any = {
+            id: 'admin-uuid-sujoy',
+            email: 'sujoy.yt0077@gmail.com',
+            is_admin: true,
+            name: 'Sujoy Admin',
+            password_hash: hashPassword('sujoy7473')
+          };
+          
+          const { error: seedUserErr } = await supabase.from('users').insert([adminPayload]);
+          if (seedUserErr) {
+            console.error('[Supabase] Failed to seed default admin user with password_hash:', seedUserErr.message);
+            // Fallback: retry without password_hash in case table schema is not migrated yet
+            console.log('[Supabase] Retrying seeding default admin user without password_hash field...');
+            const { error: fallbackSeedErr } = await supabase.from('users').insert([{
+              id: 'admin-uuid-sujoy',
+              email: 'sujoy.yt0077@gmail.com',
+              is_admin: true,
+              name: 'Sujoy Admin'
+            }]);
+            if (fallbackSeedErr) {
+              console.error('[Supabase] Failed to seed default admin user fallback:', fallbackSeedErr.message);
+            } else {
+              console.log('[Supabase] Default admin user seeded successfully (fallback, no password_hash column).');
+            }
+          } else {
+            console.log('[Supabase] Default admin user sujoy.yt0077@gmail.com seeded successfully with full security.');
+          }
         }
       }
 
@@ -399,16 +448,38 @@ export async function getUsers(): Promise<User[]> {
 export async function addUser(user: User): Promise<void> {
   if (isSupabaseActive()) {
     try {
+      const payload: any = {
+        id: user.id,
+        email: user.email,
+        is_admin: user.is_admin,
+        name: user.name || null
+      };
+      if (user.password_hash) {
+        payload.password_hash = user.password_hash;
+      }
+
       const { error } = await supabase
         .from('users')
-        .insert([{
-          id: user.id,
-          email: user.email,
-          is_admin: user.is_admin,
-          name: user.name || null
-        }]);
+        .insert([payload]);
 
-      if (error) throw error;
+      if (error) {
+        // If password_hash column does not exist in users table yet, fallback and try inserting without it
+        if (error.message && (error.message.includes('password_hash') || error.code === '42703')) {
+          console.warn('[Supabase] password_hash column not found. Retrying adding user without password_hash column...');
+          const { error: retryError } = await supabase
+            .from('users')
+            .insert([{
+              id: user.id,
+              email: user.email,
+              is_admin: user.is_admin,
+              name: user.name || null
+            }]);
+          if (retryError) throw retryError;
+        } else {
+          throw error;
+        }
+      }
+      
       console.log(`[Supabase] Successfully added user: "${user.email}"`);
       return;
     } catch (err: any) {
@@ -427,13 +498,30 @@ export async function addUser(user: User): Promise<void> {
 export async function updateUser(updatedUser: User): Promise<void> {
   if (isSupabaseActive()) {
     try {
-      const { error } = await supabase
+      const updateData: any = {
+        name: updatedUser.name || null,
+        is_admin: updatedUser.is_admin
+      };
+      if (updatedUser.password_hash) {
+        updateData.password_hash = updatedUser.password_hash;
+      }
+
+      let { error } = await supabase
         .from('users')
-        .update({
-          name: updatedUser.name || null,
-          is_admin: updatedUser.is_admin
-        })
+        .update(updateData)
         .eq('id', updatedUser.id);
+
+      if (error && error.message && (error.message.includes('password_hash') || error.code === '42703')) {
+        console.warn('[Supabase] password_hash column not found on updateUser. Retrying without it...');
+        const { error: retryError } = await supabase
+          .from('users')
+          .update({
+            name: updatedUser.name || null,
+            is_admin: updatedUser.is_admin
+          })
+          .eq('id', updatedUser.id);
+        error = retryError;
+      }
 
       if (error) throw error;
       console.log(`[Supabase] Successfully updated user: "${updatedUser.email}"`);

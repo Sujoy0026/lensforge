@@ -1,0 +1,87 @@
+{
+  "users": [
+    {
+      "id": "admin-uuid",
+      "email": "admin@lensforge.com",
+      "is_admin": true
+    },
+    {
+      "id": "admin-uuid-sujoy",
+      "email": "sujoy.yt0077@gmail.com",
+      "is_admin": true,
+      "name": "Sujoy Admin",
+      "password_hash": "c68095210d7016e4491684e947cad78dec173a90d2d34ccf52a3e74de07ab544bb28e7d1abe7093d96feaf586d70ad99fb9f5bd5462ec31df2ed5daad895bec0"
+    }
+  ],
+  "products": [
+    {
+      "id": "p-quantum-dashboard",
+      "name": "Quantum Dashboard UI Kit",
+      "category": "Dashboards",
+      "price": 99,
+      "description": "Sleek, premium dashboard system crafted with high contrast styling, featuring 60+ customizable React UI blocks, fluid responsive charts (Recharts), customizable layouts, and comprehensive application screens.",
+      "image_url": "/uploads/quantum_dashboard.png",
+      "file_url": "/api/downloads/p-quantum-dashboard",
+      "created_at": "2026-08-06T07:26:36.770Z",
+      "type": "Hybrid",
+      "prompt_text": "system_prompt = \"\"\"\nYou are a senior frontend developer specializing in high-performance dashboard UI design.\nAnalyze the provided layout guidelines and build a responsive React component.\n\"\"\"\ncomponents = [\"Sidebar\", \"KPI_Cards\", \"InteractiveChart\", \"TransactionTable\"]\ntheme = \"Dark Mode / Premium Slate\"\n"
+    },
+    {
+      "id": "p-aura-3d-saas",
+      "name": "Aura 3D SaaS Landing Template",
+      "category": "Templates",
+      "price": 49,
+      "description": "A premium Next.js landing page template optimized for SaaS conversions. Framer Motion powered interactions, scroll-bound 3D floating mockups, dark/light transitions, and standard integration forms built-in.",
+      "image_url": "/uploads/aura_saas.png",
+      "file_url": "/api/downloads/p-aura-3d-saas",
+      "created_at": "2026-08-06T07:26:36.770Z",
+      "type": "ZIP"
+    },
+    {
+      "id": "p-helix-assets",
+      "name": "Helix 3D Glass Asset Pack",
+      "category": "3D SaaS",
+      "price": 79,
+      "description": "Set of 20 high-fidelity customizable 3D glassmorphic icons and decorative elements. Rendered in premium translucent materials, optimized for web integration and standard visual tools (Figma, PNG, OBJ).",
+      "image_url": "/uploads/helix_assets.png",
+      "file_url": "/api/downloads/p-helix-assets",
+      "created_at": "2026-08-06T07:26:36.770Z",
+      "type": "ZIP"
+    },
+    {
+      "id": "p-stark-admin",
+      "name": "Stark Admin UI Pro",
+      "category": "Dashboards",
+      "price": 129,
+      "description": "An ultra-dense, developer-first dashboard kit featuring full Tailwind control, custom data tables, inline analytics visualization, drag-and-drop kanbans, and highly polished visual styles for SaaS controllers.",
+      "image_url": "/uploads/stark_admin.png",
+      "file_url": "/api/downloads/p-stark-admin",
+      "created_at": "2026-08-06T07:26:36.770Z",
+      "type": "ZIP"
+    },
+    {
+      "id": "p-vortex-landing",
+      "name": "Vortex Landing Template",
+      "category": "Templates",
+      "price": 29,
+      "description": "Sleek high-converting template with pristine whitespace, premium font pairing, clean grids, and smooth reveal animations. Highly customizable and built for modern web standards.",
+      "image_url": "/uploads/vortex_landing.png",
+      "file_url": "/api/downloads/p-vortex-landing",
+      "created_at": "2026-08-06T07:26:36.770Z",
+      "type": "ZIP"
+    },
+    {
+      "id": "p-ai-prompt-engineer",
+      "name": "SaaS Generator Premium Prompt",
+      "category": "Templates",
+      "price": 19,
+      "description": "An advanced, fine-tuned System Prompt for LLMs to generate pristine, production-ready SaaS landing pages with elegant typography, mathematical padding, and modern dark mode colors.",
+      "image_url": "/uploads/ai_prompt_engineer.png",
+      "file_url": "/api/downloads/p-ai-prompt-engineer",
+      "created_at": "2026-08-06T07:26:36.770Z",
+      "type": "Prompt",
+      "prompt_text": "/imagine prompt: a premium software-as-a-service application web page design, sleek minimalist dashboard, dark mode #09090b backdrop, glowing subtle indigo lines, translucent cards, 3D clay render spheres floating, high fidelity design, shot on 35mm lens, 8k resolution, photorealistic, cinematic lighting --ar 16:9 --v 6.0"
+    }
+  ],
+  "orders": []
+}

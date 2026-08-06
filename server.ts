@@ -18,6 +18,8 @@ import {
   updateOrder,
   getAdminStats,
   getSupabaseConfig,
+  hashPassword,
+  verifyPassword,
 } from './src/server-db.js';
 import { Product, User, Order } from './src/types.js';
 
@@ -114,8 +116,8 @@ function requireAdmin(req: express.Request, res: express.Response, next: express
   }
   const token = authHeader.split(' ')[1];
   const user = verifyToken(token);
-  if (!user || !user.is_admin) {
-    return res.status(403).json({ error: 'Admin access required' });
+  if (!user || !user.is_admin || user.email.toLowerCase() !== 'sujoy.yt0077@gmail.com') {
+    return res.status(403).json({ error: 'Admin access required (Authorized administrative access only)' });
   }
   (req as any).user = user;
   next();
@@ -137,11 +139,12 @@ app.post('/api/auth/signup', async (req, res) => {
     return res.status(400).json({ error: 'User already exists with this email' });
   }
 
-  const is_admin = email.toLowerCase() === 'admin@lensforge.com';
+  const is_admin = email.toLowerCase() === 'sujoy.yt0077@gmail.com';
   const newUser: User = {
     id: 'u-' + crypto.randomUUID(),
     email: email.toLowerCase(),
     is_admin,
+    password_hash: hashPassword(password)
   };
 
   await addUser(newUser);
@@ -159,17 +162,40 @@ app.post('/api/auth/login', async (req, res) => {
   const users = await getUsers();
   const user = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
 
+  // Strict check for the admin credentials
+  if (email.toLowerCase() === 'sujoy.yt0077@gmail.com') {
+    if (password !== 'sujoy7473') {
+      return res.status(401).json({ error: 'Invalid admin credentials' });
+    }
+    // If admin doesn't exist in the database yet, register them dynamically
+    if (!user) {
+      const newAdmin: User = {
+        id: 'admin-uuid-sujoy',
+        email: 'sujoy.yt0077@gmail.com',
+        is_admin: true,
+        password_hash: hashPassword('sujoy7473')
+      };
+      await addUser(newAdmin);
+      const token = generateToken(newAdmin);
+      return res.json({ user: newAdmin, token, message: 'Admin account created and logged in successfully' });
+    }
+  }
+
   if (!user) {
-    // For local evaluation, automatically register user on login attempt if not exists
-    const is_admin = email.toLowerCase() === 'admin@lensforge.com';
-    const newUser: User = {
-      id: 'u-' + crypto.randomUUID(),
-      email: email.toLowerCase(),
-      is_admin,
-    };
-    await addUser(newUser);
-    const token = generateToken(newUser);
-    return res.json({ user: newUser, token, message: 'Account automatically created' });
+    return res.status(401).json({ error: 'Account does not exist. Please sign up first!' });
+  }
+
+  // If password_hash is stored, check it
+  if (user.password_hash) {
+    if (!verifyPassword(password, user.password_hash)) {
+      return res.status(401).json({ error: 'Invalid password' });
+    }
+  } else {
+    // If no password_hash is stored in their DB (e.g., from old seeded admin),
+    // let's update their password_hash on the fly if it matches a temporary default password
+    // or set it for normal users.
+    user.password_hash = hashPassword(password);
+    await updateUser(user);
   }
 
   const token = generateToken(user);
@@ -195,6 +221,10 @@ app.post('/api/user/update', requireAuth, async (req, res) => {
     name: name || user.name,
   };
 
+  if (password) {
+    updatedUser.password_hash = hashPassword(password);
+  }
+
   await updateUser(updatedUser);
   const token = generateToken(updatedUser);
 
@@ -202,7 +232,7 @@ app.post('/api/user/update', requireAuth, async (req, res) => {
     success: true,
     user: updatedUser,
     token,
-    message: 'Profile updated successfully' + (password ? ' (simulated password change)' : ''),
+    message: 'Profile updated successfully' + (password ? ' (password updated securely)' : ''),
   });
 });
 

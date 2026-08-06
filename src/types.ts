@@ -22,6 +22,7 @@ export interface User {
   email: string;
   is_admin: boolean;
   name?: string;
+  password_hash?: string;
 }
 
 export interface Order {
