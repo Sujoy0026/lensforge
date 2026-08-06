@@ -12,18 +12,17 @@ import {
   deleteProduct,
   getUsers,
   addUser,
+  updateUser,
   getOrders,
   addOrder,
   updateOrder,
   getAdminStats,
+  getSupabaseConfig,
 } from './src/server-db.js';
 import { Product, User, Order } from './src/types.js';
 
 const app = express();
 const PORT = 3000;
-
-// Initialize database & directories
-initDatabase();
 
 // Middleware
 app.use(express.json());
@@ -127,13 +126,13 @@ function requireAdmin(req: express.Request, res: express.Response, next: express
    ========================================================================== */
 
 // --- Authentication ---
-app.post('/api/auth/signup', (req, res) => {
+app.post('/api/auth/signup', async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) {
     return res.status(400).json({ error: 'Email and password are required' });
   }
 
-  const existingUsers = getUsers();
+  const existingUsers = await getUsers();
   if (existingUsers.find((u) => u.email.toLowerCase() === email.toLowerCase())) {
     return res.status(400).json({ error: 'User already exists with this email' });
   }
@@ -145,19 +144,19 @@ app.post('/api/auth/signup', (req, res) => {
     is_admin,
   };
 
-  addUser(newUser);
+  await addUser(newUser);
   const token = generateToken(newUser);
 
   res.json({ user: newUser, token, message: 'Signup successful' });
 });
 
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) {
     return res.status(400).json({ error: 'Email and password are required' });
   }
 
-  const users = getUsers();
+  const users = await getUsers();
   const user = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
 
   if (!user) {
@@ -168,7 +167,7 @@ app.post('/api/auth/login', (req, res) => {
       email: email.toLowerCase(),
       is_admin,
     };
-    addUser(newUser);
+    await addUser(newUser);
     const token = generateToken(newUser);
     return res.json({ user: newUser, token, message: 'Account automatically created' });
   }
@@ -187,9 +186,29 @@ app.get('/api/auth/me', (req, res) => {
   res.json({ user });
 });
 
+app.post('/api/user/update', requireAuth, async (req, res) => {
+  const { name, password } = req.body;
+  const user = (req as any).user;
+
+  const updatedUser: User = {
+    ...user,
+    name: name || user.name,
+  };
+
+  await updateUser(updatedUser);
+  const token = generateToken(updatedUser);
+
+  res.json({
+    success: true,
+    user: updatedUser,
+    token,
+    message: 'Profile updated successfully' + (password ? ' (simulated password change)' : ''),
+  });
+});
+
 // --- Products CRUD ---
-app.get('/api/products', (req, res) => {
-  const products = getProducts();
+app.get('/api/products', async (req, res) => {
+  const products = await getProducts();
   res.json(products);
 });
 
@@ -200,21 +219,27 @@ app.post(
     { name: 'preview_image', maxCount: 1 },
     { name: 'product_zip', maxCount: 1 },
   ]),
-  (req, res) => {
+  async (req, res) => {
     try {
-      const { name, category, price, description } = req.body;
+      const { name, category, price, description, type, prompt_text } = req.body;
       const files = req.files as { [fieldname: string]: Express.Multer.File[] };
 
       if (!name || !category || !price || !description) {
         return res.status(400).json({ error: 'All fields are required' });
       }
 
-      if (!files || !files['preview_image'] || !files['product_zip']) {
-        return res.status(400).json({ error: 'Both image preview and product ZIP are required' });
+      if (!files || !files['preview_image']) {
+        return res.status(400).json({ error: 'An image preview is required' });
+      }
+
+      const selectedType = type || 'ZIP';
+      const hasZip = files['product_zip'] && files['product_zip'][0];
+
+      if (selectedType !== 'Prompt' && !hasZip) {
+        return res.status(400).json({ error: 'A product ZIP is required for ZIP and Hybrid asset types' });
       }
 
       const imageFile = files['preview_image'][0];
-      const zipFile = files['product_zip'][0];
       const productId = 'p-' + crypto.randomUUID();
 
       const newProduct: Product = {
@@ -226,13 +251,22 @@ app.post(
         image_url: `/uploads/${imageFile.filename}`,
         file_url: `/api/downloads/${productId}`,
         created_at: new Date().toISOString(),
+        type: selectedType,
+        prompt_text: (selectedType === 'Prompt' || selectedType === 'Hybrid') ? (prompt_text || '') : undefined,
       };
 
-      // Rename ZIP file to match product ID to keep it secure and neat
-      const secureZipPath = path.join(ZIPS_DIR, `${productId}.zip`);
-      fs.renameSync(zipFile.path, secureZipPath);
+      if (hasZip) {
+        const zipFile = files['product_zip'][0];
+        // Rename ZIP file to match product ID to keep it secure and neat
+        const secureZipPath = path.join(ZIPS_DIR, `${productId}.zip`);
+        fs.renameSync(zipFile.path, secureZipPath);
+      } else if (selectedType === 'Prompt') {
+        // Create an empty dummy placeholder zip just in case the customer tries to download it
+        const secureZipPath = path.join(ZIPS_DIR, `${productId}.zip`);
+        fs.writeFileSync(secureZipPath, `This is a premium AI prompt asset: "${name}". No ZIP download package is required.`);
+      }
 
-      addProduct(newProduct);
+      await addProduct(newProduct);
       res.status(201).json(newProduct);
     } catch (err: any) {
       console.error('Error adding product:', err);
@@ -241,9 +275,9 @@ app.post(
   }
 );
 
-app.delete('/api/products/:id', requireAdmin, (req, res) => {
+app.delete('/api/products/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
-  const deleted = deleteProduct(id);
+  const deleted = await deleteProduct(id);
 
   if (deleted) {
     // Optionally clean up files
@@ -260,11 +294,11 @@ app.delete('/api/products/:id', requireAdmin, (req, res) => {
 });
 
 // --- Secure Payment Gateway Integrations ---
-app.post('/api/checkout/create-order', requireAuth, (req, res) => {
+app.post('/api/checkout/create-order', requireAuth, async (req, res) => {
   const { productId } = req.body;
   const user = (req as any).user;
 
-  const products = getProducts();
+  const products = await getProducts();
   const product = products.find((p) => p.id === productId);
 
   if (!product) {
@@ -281,13 +315,13 @@ app.post('/api/checkout/create-order', requireAuth, (req, res) => {
       receipt: `receipt_${productId}_${Date.now()}`,
     };
 
-    razorpayInstance.orders.create(options, (err: any, order: any) => {
+    razorpayInstance.orders.create(options, async (err: any, order: any) => {
       if (err) {
         console.error('Payment order creation error:', err);
         return res.status(500).json({ error: 'Failed to initiate secure order' });
       }
 
-      // Record a pending order in local DB
+      // Record a pending order in DB
       const newOrder: Order = {
         id: order.id,
         user_id: user.id,
@@ -297,7 +331,7 @@ app.post('/api/checkout/create-order', requireAuth, (req, res) => {
         status: 'pending',
         created_at: new Date().toISOString(),
       };
-      addOrder(newOrder);
+      await addOrder(newOrder);
 
       res.json({
         id: order.id,
@@ -321,7 +355,7 @@ app.post('/api/checkout/create-order', requireAuth, (req, res) => {
       status: 'pending',
       created_at: new Date().toISOString(),
     };
-    addOrder(newOrder);
+    await addOrder(newOrder);
 
     res.json({
       id: orderId,
@@ -333,7 +367,7 @@ app.post('/api/checkout/create-order', requireAuth, (req, res) => {
   }
 });
 
-app.post('/api/checkout/verify-payment', requireAuth, (req, res) => {
+app.post('/api/checkout/verify-payment', requireAuth, async (req, res) => {
   const {
     razorpay_order_id,
     razorpay_payment_id,
@@ -345,13 +379,13 @@ app.post('/api/checkout/verify-payment', requireAuth, (req, res) => {
 
   if (isSandbox || !razorpayInstance) {
     // Complete Sandbox Order Verification
-    const updated = updateOrder(razorpay_order_id, 'completed', razorpay_payment_id || 'pay_test_' + crypto.randomBytes(6).toString('hex'));
+    const updated = await updateOrder(razorpay_order_id, 'completed', razorpay_payment_id || 'pay_test_' + crypto.randomBytes(6).toString('hex'));
     if (updated) {
       return res.json({ verified: true, message: 'Sandbox payment simulated and saved successfully' });
     }
 
     // fallback if order wasn't found (force create complete order)
-    const products = getProducts();
+    const products = await getProducts();
     const product = products.find((p) => p.id === productId);
     const mockOrder: Order = {
       id: razorpay_order_id || 'order_fallback_' + crypto.randomBytes(8).toString('hex'),
@@ -362,7 +396,7 @@ app.post('/api/checkout/verify-payment', requireAuth, (req, res) => {
       status: 'completed',
       created_at: new Date().toISOString(),
     };
-    addOrder(mockOrder);
+    await addOrder(mockOrder);
     return res.json({ verified: true, message: 'Fallback payment verified successfully' });
   }
 
@@ -375,16 +409,16 @@ app.post('/api/checkout/verify-payment', requireAuth, (req, res) => {
 
   if (generated_signature === razorpay_signature) {
     // Mark as completed
-    updateOrder(razorpay_order_id, 'completed', razorpay_payment_id);
+    await updateOrder(razorpay_order_id, 'completed', razorpay_payment_id);
     res.json({ verified: true, message: 'Payment verified successfully!' });
   } else {
-    updateOrder(razorpay_order_id, 'failed', razorpay_payment_id);
+    await updateOrder(razorpay_order_id, 'failed', razorpay_payment_id);
     res.status(400).json({ verified: false, error: 'Payment signature verification failed' });
   }
 });
 
 // --- Secure Digital Delivery Downloads ---
-app.get('/api/downloads/:id', (req, res) => {
+app.get('/api/downloads/:id', async (req, res) => {
   const { id } = req.params;
   const token = req.query.token as string;
 
@@ -395,7 +429,7 @@ app.get('/api/downloads/:id', (req, res) => {
 
   // 1. Admin gets instant downloads
   // 2. Customers must have a completed purchase order
-  const orders = getOrders();
+  const orders = await getOrders();
   const hasPurchased = orders.some(
     (o) => o.product_id === id && o.user_id === user.id && o.status === 'completed'
   );
@@ -404,7 +438,7 @@ app.get('/api/downloads/:id', (req, res) => {
     return res.status(403).send('<h1>Access Denied</h1><p>You must purchase this asset to unlock secure downloads.</p>');
   }
 
-  const products = getProducts();
+  const products = await getProducts();
   const product = products.find((p) => p.id === id);
   if (!product) {
     return res.status(404).send('<h1>Not Found</h1><p>Product not found.</p>');
@@ -427,16 +461,21 @@ app.get('/api/downloads/:id', (req, res) => {
 });
 
 // --- Admin Stats ---
-app.get('/api/admin/stats', requireAdmin, (req, res) => {
-  const stats = getAdminStats();
+app.get('/api/admin/stats', requireAdmin, async (req, res) => {
+  const stats = await getAdminStats();
   res.json(stats);
 });
 
+// --- Admin Supabase Config ---
+app.get('/api/admin/supabase-status', requireAdmin, (req, res) => {
+  res.json(getSupabaseConfig());
+});
+
 // --- Purchases endpoint for User Dashboard ---
-app.get('/api/purchases', requireAuth, (req, res) => {
+app.get('/api/purchases', requireAuth, async (req, res) => {
   const user = (req as any).user;
-  const orders = getOrders().filter((o) => o.user_id === user.id && o.status === 'completed');
-  const products = getProducts();
+  const orders = (await getOrders()).filter((o) => o.user_id === user.id && o.status === 'completed');
+  const products = await getProducts();
 
   const purchasedProducts = orders.map((order) => {
     const product = products.find((p) => p.id === order.product_id);
@@ -457,6 +496,14 @@ app.get('/api/purchases', requireAuth, (req, res) => {
    ========================================================================== */
 
 async function startServer() {
+  // Initialize and seed database (Supabase or local file JSON fallback)
+  try {
+    await initDatabase();
+    console.log('[LensForge] Database initialization and synchronization completed.');
+  } catch (err: any) {
+    console.error('[LensForge] Database initialization error:', err.message);
+  }
+
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
       server: { middlewareMode: true },

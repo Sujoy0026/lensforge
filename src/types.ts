@@ -13,12 +13,15 @@ export interface Product {
   image_url: string; // URL path or base64
   file_url: string; // download path
   created_at: string;
+  type?: 'ZIP' | 'Prompt' | 'Hybrid';
+  prompt_text?: string;
 }
 
 export interface User {
   id: string;
   email: string;
   is_admin: boolean;
+  name?: string;
 }
 
 export interface Order {
