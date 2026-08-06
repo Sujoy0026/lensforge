@@ -79,6 +79,15 @@ export default function App() {
       setUser(JSON.parse(savedUser));
     }
 
+    // Check for email verification success in URL
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('verified') === 'true') {
+      setSuccessBanner('Email verified successfully! You can now log in.');
+      setTimeout(() => setSuccessBanner(''), 6000);
+      window.history.replaceState({}, document.title, window.location.pathname);
+      openAuthModal('login');
+    }
+
     // Load initial products
     fetchProducts();
   }, []);

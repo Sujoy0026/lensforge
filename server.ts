@@ -22,6 +22,7 @@ import {
   verifyPassword,
 } from './src/server-db.js';
 import { Product, User, Order } from './src/types.js';
+import { sendVerificationEmail } from './src/server-mailer.js';
 
 const app = express();
 const PORT = 3000;
@@ -34,6 +35,48 @@ app.use(express.urlencoded({ extended: true }));
 const DATA_DIR = path.join(process.cwd(), 'data');
 const IMAGES_DIR = path.join(DATA_DIR, 'uploads', 'images');
 const ZIPS_DIR = path.join(DATA_DIR, 'uploads', 'zips');
+const LOG_FILE = path.join(DATA_DIR, 'server.log');
+
+// Setup detailed file logger helper
+function logToFile(message: string) {
+  const timestamp = new Date().toISOString();
+  const logLine = `[${timestamp}] ${message}\n`;
+  console.log(logLine.trim());
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    fs.appendFileSync(LOG_FILE, logLine, 'utf-8');
+  } catch (err) {
+    // Fail silently to avoid interrupting the server
+  }
+}
+
+// Request and Response Logger Interceptor
+app.use((req, res, next) => {
+  logToFile(`Incoming request: ${req.method} ${req.url}`);
+  
+  const start = Date.now();
+  const originalJson = res.json;
+  res.json = function (body) {
+    const duration = Date.now() - start;
+    logToFile(`Response JSON [${res.statusCode}] (${duration}ms) for ${req.method} ${req.url} - body: ${JSON.stringify(body).substring(0, 300)}`);
+    return originalJson.call(this, body);
+  };
+
+  const originalSend = res.send;
+  res.send = function (body) {
+    const duration = Date.now() - start;
+    if (typeof body === 'string' && (body.includes('<!DOCTYPE') || body.includes('<html>'))) {
+      logToFile(`Response HTML [${res.statusCode}] (${duration}ms) for ${req.method} ${req.url} - starts with: ${body.substring(0, 200).replace(/\s+/g, ' ')}`);
+    } else {
+      logToFile(`Response Send [${res.statusCode}] (${duration}ms) for ${req.method} ${req.url}`);
+    }
+    return originalSend.call(this, body);
+  };
+
+  next();
+});
 
 app.use('/uploads', express.static(IMAGES_DIR));
 
@@ -140,17 +183,45 @@ app.post('/api/auth/signup', async (req, res) => {
   }
 
   const is_admin = email.toLowerCase() === 'sujoy.yt0077@gmail.com';
+  const verificationToken = crypto.randomBytes(32).toString('hex');
+  const isVerifiedSupported = existingUsers.length === 0 || ('is_verified' in existingUsers[0]);
+
   const newUser: User = {
     id: 'u-' + crypto.randomUUID(),
     email: email.toLowerCase(),
     is_admin,
-    password_hash: hashPassword(password)
+    password_hash: hashPassword(password),
+    is_verified: is_admin || !isVerifiedSupported, // Auto-verify if database schema doesn't support the is_verified column
+    verification_token: (is_admin || !isVerifiedSupported) ? undefined : verificationToken,
   };
 
   await addUser(newUser);
-  const token = generateToken(newUser);
 
-  res.json({ user: newUser, token, message: 'Signup successful' });
+  if (is_admin || !isVerifiedSupported) {
+    const token = generateToken(newUser);
+    return res.json({ 
+      user: { id: newUser.id, email: newUser.email, is_admin: newUser.is_admin, is_verified: true }, 
+      token, 
+      message: is_admin ? 'Signup successful! Welcome Admin.' : 'Signup successful! Welcome to LensForge.' 
+    });
+  }
+
+  // Generate verification link
+  const appUrl = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+  const verificationLink = `${appUrl}/api/auth/verify-email?token=${verificationToken}`;
+
+  const mailResult = await sendVerificationEmail({
+    email: newUser.email,
+    verificationLink,
+  });
+
+  res.json({
+    user: { id: newUser.id, email: newUser.email, is_admin: newUser.is_admin, is_verified: false },
+    message: 'Signup successful! Please check your inbox for a verification email to activate your account.',
+    is_simulated: mailResult.simulated || !mailResult.success,
+    verification_link_simulated: (mailResult.simulated || !mailResult.success) ? verificationLink : null,
+    mail_error: mailResult.success ? null : mailResult.error
+  });
 });
 
 app.post('/api/auth/login', async (req, res) => {
@@ -173,7 +244,8 @@ app.post('/api/auth/login', async (req, res) => {
         id: 'admin-uuid-sujoy',
         email: 'sujoy.yt0077@gmail.com',
         is_admin: true,
-        password_hash: hashPassword('sujoy7473')
+        password_hash: hashPassword('sujoy7473'),
+        is_verified: true,
       };
       await addUser(newAdmin);
       const token = generateToken(newAdmin);
@@ -191,15 +263,104 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid password' });
     }
   } else {
-    // If no password_hash is stored in their DB (e.g., from old seeded admin),
-    // let's update their password_hash on the fly if it matches a temporary default password
-    // or set it for normal users.
     user.password_hash = hashPassword(password);
     await updateUser(user);
   }
 
+  // Enforce Email Verification Check for non-admin customers only if supported by the database schema
+  const isVerifiedSupported = 'is_verified' in user;
+  if (isVerifiedSupported && !user.is_verified && user.email.toLowerCase() !== 'sujoy.yt0077@gmail.com') {
+    const verificationToken = user.verification_token || crypto.randomBytes(32).toString('hex');
+    if (!user.verification_token) {
+      user.verification_token = verificationToken;
+      await updateUser(user);
+    }
+
+    const appUrl = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+    const verificationLink = `${appUrl}/api/auth/verify-email?token=${verificationToken}`;
+
+    return res.status(403).json({
+      error: 'Please verify your email address to log in.',
+      is_unverified: true,
+      email: user.email,
+      is_simulated: true,
+      verification_link_simulated: verificationLink
+    });
+  }
+
   const token = generateToken(user);
   res.json({ user, token, message: 'Login successful' });
+});
+
+app.get('/api/auth/verify-email', async (req, res) => {
+  const { token } = req.query;
+  if (!token) {
+    return res.status(400).send(`
+      <div style="font-family: sans-serif; text-align: center; margin-top: 100px;">
+        <h1 style="color: #dc2626;">Verification Token is Missing</h1>
+        <p style="color: #4b5563;">Please check your link and try again.</p>
+        <a href="/" style="display: inline-block; background: #4f46e5; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; margin-top: 20px;">Return to LensForge</a>
+      </div>
+    `);
+  }
+
+  const users = await getUsers();
+  const user = users.find((u) => u.verification_token === token);
+
+  if (!user) {
+    return res.status(400).send(`
+      <div style="font-family: sans-serif; text-align: center; margin-top: 100px;">
+        <h1 style="color: #dc2626;">Invalid or Expired Verification Link</h1>
+        <p style="color: #4b5563;">This verification link may have expired or already been used.</p>
+        <a href="/" style="display: inline-block; background: #4f46e5; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; margin-top: 20px;">Return to LensForge</a>
+      </div>
+    `);
+  }
+
+  user.is_verified = true;
+  user.verification_token = undefined;
+  await updateUser(user);
+
+  const appUrl = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+  res.redirect(`${appUrl}/?verified=true`);
+});
+
+app.post('/api/auth/resend-verification', async (req, res) => {
+  const { email } = req.body;
+  if (!email) {
+    return res.status(400).json({ error: 'Email is required' });
+  }
+
+  const users = await getUsers();
+  const user = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
+
+  if (!user) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+
+  if (user.is_verified) {
+    return res.json({ success: true, message: 'This email is already verified.' });
+  }
+
+  const verificationToken = user.verification_token || crypto.randomBytes(32).toString('hex');
+  user.verification_token = verificationToken;
+  await updateUser(user);
+
+  const appUrl = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+  const verificationLink = `${appUrl}/api/auth/verify-email?token=${verificationToken}`;
+
+  const mailResult = await sendVerificationEmail({
+    email: user.email,
+    verificationLink,
+  });
+
+  res.json({
+    success: true,
+    message: 'Verification link resent successfully.',
+    is_simulated: mailResult.simulated || !mailResult.success,
+    verification_link_simulated: (mailResult.simulated || !mailResult.success) ? verificationLink : null,
+    mail_error: mailResult.success ? null : mailResult.error
+  });
 });
 
 app.get('/api/auth/me', (req, res) => {
@@ -519,6 +680,22 @@ app.get('/api/purchases', requireAuth, async (req, res) => {
   }).filter((p) => p.product !== undefined);
 
   res.json(purchasedProducts);
+});
+
+// Global Express Error-handling Middleware
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const errorMsg = err?.stack || err?.message || err;
+  logToFile(`EXPRESS UNCAUGHT ERROR: ${errorMsg}`);
+  res.status(500).json({ error: 'Internal Server Error', details: err?.message || String(err) });
+});
+
+// Process Level Crash Handlers
+process.on('uncaughtException', (err) => {
+  logToFile(`CRITICAL UNCAUGHT PROCESS EXCEPTION: ${err?.stack || err?.message || err}`);
+});
+
+process.on('unhandledRejection', (reason: any) => {
+  logToFile(`CRITICAL UNHANDLED PROCESS REJECTION: ${reason?.stack || reason?.message || reason}`);
 });
 
 /* ==========================================================================

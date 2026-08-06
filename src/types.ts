@@ -23,6 +23,8 @@ export interface User {
   is_admin: boolean;
   name?: string;
   password_hash?: string;
+  is_verified?: boolean;
+  verification_token?: string;
 }
 
 export interface Order {

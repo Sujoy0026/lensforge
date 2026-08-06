@@ -89,11 +89,15 @@ CREATE TABLE IF NOT EXISTS public.users (
     email TEXT UNIQUE NOT NULL,
     is_admin BOOLEAN DEFAULT false,
     name TEXT,
-    password_hash TEXT
+    password_hash TEXT,
+    is_verified BOOLEAN DEFAULT false,
+    verification_token TEXT
 );
 
--- Note: If you already have a 'users' table created, run the following SQL command to add security:
+-- Note: If you already have a 'users' table created, run the following SQL commands to add security & verification:
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS password_hash TEXT;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT false;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS verification_token TEXT;
 
 -- 2. Create 'products' table
 CREATE TABLE IF NOT EXISTS public.products (
@@ -248,9 +252,17 @@ export async function initDatabase() {
       email: 'sujoy.yt0077@gmail.com',
       is_admin: true,
       name: 'Sujoy Admin',
-      password_hash: hashPassword('sujoy7473')
+      password_hash: hashPassword('sujoy7473'),
+      is_verified: true
     });
     localSaved = true;
+  } else {
+    // Ensure existing local admin has is_verified = true
+    const localAdmin = localDb.users.find(u => u.email.toLowerCase() === 'sujoy.yt0077@gmail.com');
+    if (localAdmin && !localAdmin.is_verified) {
+      localAdmin.is_verified = true;
+      localSaved = true;
+    }
   }
 
   if (localDb.products.length === 0) {
@@ -289,27 +301,30 @@ export async function initDatabase() {
             email: 'sujoy.yt0077@gmail.com',
             is_admin: true,
             name: 'Sujoy Admin',
-            password_hash: hashPassword('sujoy7473')
+            password_hash: hashPassword('sujoy7473'),
+            is_verified: true
           };
           
-          const { error: seedUserErr } = await supabase.from('users').insert([adminPayload]);
+          let { error: seedUserErr } = await supabase.from('users').insert([adminPayload]);
           if (seedUserErr) {
-            console.error('[Supabase] Failed to seed default admin user with password_hash:', seedUserErr.message);
-            // Fallback: retry without password_hash in case table schema is not migrated yet
-            console.log('[Supabase] Retrying seeding default admin user without password_hash field...');
-            const { error: fallbackSeedErr } = await supabase.from('users').insert([{
+            console.warn('[Supabase] Seeding with verification failed. Trying with basic payload...');
+            const fallbackPayload: any = {
               id: 'admin-uuid-sujoy',
               email: 'sujoy.yt0077@gmail.com',
               is_admin: true,
-              name: 'Sujoy Admin'
-            }]);
+              name: 'Sujoy Admin',
+            };
+            if (adminPayload.password_hash) {
+              fallbackPayload.password_hash = adminPayload.password_hash;
+            }
+            const { error: fallbackSeedErr } = await supabase.from('users').insert([fallbackPayload]);
             if (fallbackSeedErr) {
               console.error('[Supabase] Failed to seed default admin user fallback:', fallbackSeedErr.message);
             } else {
-              console.log('[Supabase] Default admin user seeded successfully (fallback, no password_hash column).');
+              console.log('[Supabase] Default admin user seeded successfully (fallback, basic columns).');
             }
           } else {
-            console.log('[Supabase] Default admin user sujoy.yt0077@gmail.com seeded successfully with full security.');
+            console.log('[Supabase] Default admin user sujoy.yt0077@gmail.com seeded successfully with full security and verification.');
           }
         }
       }
@@ -457,24 +472,52 @@ export async function addUser(user: User): Promise<void> {
       if (user.password_hash) {
         payload.password_hash = user.password_hash;
       }
+      if (user.is_verified !== undefined) {
+        payload.is_verified = user.is_verified;
+      }
+      if (user.verification_token !== undefined) {
+        payload.verification_token = user.verification_token;
+      }
 
       const { error } = await supabase
         .from('users')
         .insert([payload]);
 
       if (error) {
-        // If password_hash column does not exist in users table yet, fallback and try inserting without it
-        if (error.message && (error.message.includes('password_hash') || error.code === '42703')) {
-          console.warn('[Supabase] password_hash column not found. Retrying adding user without password_hash column...');
+        // If password_hash, is_verified, or verification_token columns do not exist in users table yet, fallback and try inserting with only core columns
+        const isColumnError = error.code === '42703' || (error.message && (
+          error.message.includes('password_hash') || 
+          error.message.includes('is_verified') || 
+          error.message.includes('verification_token')
+        ));
+        if (isColumnError) {
+          console.warn('[Supabase] Advanced columns not found. Retrying adding user with basic columns...');
+          const fallbackPayload: any = {
+            id: user.id,
+            email: user.email,
+            is_admin: user.is_admin,
+            name: user.name || null
+          };
+          if (user.password_hash) {
+            fallbackPayload.password_hash = user.password_hash;
+          }
           const { error: retryError } = await supabase
             .from('users')
-            .insert([{
-              id: user.id,
-              email: user.email,
-              is_admin: user.is_admin,
-              name: user.name || null
-            }]);
-          if (retryError) throw retryError;
+            .insert([fallbackPayload]);
+          
+          if (retryError) {
+            // Absolute minimal fallback
+            console.warn('[Supabase] Retrying adding user with absolute minimal columns...');
+            const { error: minimalError } = await supabase
+              .from('users')
+              .insert([{
+                id: user.id,
+                email: user.email,
+                is_admin: user.is_admin,
+                name: user.name || null
+              }]);
+            if (minimalError) throw minimalError;
+          }
         } else {
           throw error;
         }
@@ -505,22 +548,51 @@ export async function updateUser(updatedUser: User): Promise<void> {
       if (updatedUser.password_hash) {
         updateData.password_hash = updatedUser.password_hash;
       }
+      if (updatedUser.is_verified !== undefined) {
+        updateData.is_verified = updatedUser.is_verified;
+      }
+      if (updatedUser.verification_token !== undefined) {
+        updateData.verification_token = updatedUser.verification_token;
+      }
 
       let { error } = await supabase
         .from('users')
         .update(updateData)
         .eq('id', updatedUser.id);
 
-      if (error && error.message && (error.message.includes('password_hash') || error.code === '42703')) {
-        console.warn('[Supabase] password_hash column not found on updateUser. Retrying without it...');
+      const isColumnError = error && (error.code === '42703' || (error.message && (
+        error.message.includes('password_hash') || 
+        error.message.includes('is_verified') || 
+        error.message.includes('verification_token')
+      )));
+
+      if (isColumnError) {
+        console.warn('[Supabase] Advanced columns not found on updateUser. Retrying with basic columns...');
+        const retryData: any = {
+          name: updatedUser.name || null,
+          is_admin: updatedUser.is_admin
+        };
+        if (updatedUser.password_hash) {
+          retryData.password_hash = updatedUser.password_hash;
+        }
         const { error: retryError } = await supabase
           .from('users')
-          .update({
-            name: updatedUser.name || null,
-            is_admin: updatedUser.is_admin
-          })
+          .update(retryData)
           .eq('id', updatedUser.id);
-        error = retryError;
+        
+        if (retryError) {
+          // Retry with absolute minimum columns
+          const { error: minimalError } = await supabase
+            .from('users')
+            .update({
+              name: updatedUser.name || null,
+              is_admin: updatedUser.is_admin
+            })
+            .eq('id', updatedUser.id);
+          error = minimalError;
+        } else {
+          error = null;
+        }
       }
 
       if (error) throw error;
