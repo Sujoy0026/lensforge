@@ -370,7 +370,11 @@ export async function getProducts(): Promise<Product[]> {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      return (data || []) as Product[];
+      const productsList = (data || []) as Product[];
+      if (productsList.length === 0) {
+        return defaultProducts;
+      }
+      return productsList;
     } catch (err: any) {
       console.error('[Supabase] Error in getProducts query, serving local database:', err.message);
     }
