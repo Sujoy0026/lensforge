@@ -169,8 +169,20 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess, initialMode 
         </div>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 text-xs rounded-lg font-medium">
-            {error}
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 text-xs rounded-lg font-medium flex flex-col gap-1.5">
+            <span>{error}</span>
+            {error.toLowerCase().includes('already exists') && (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsSignUp(false);
+                  setError('');
+                }}
+                className="text-left text-xs text-indigo-600 hover:text-indigo-800 font-semibold underline cursor-pointer"
+              >
+                Switch to Sign In &rarr;
+              </button>
+            )}
           </div>
         )}
 
