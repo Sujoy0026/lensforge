@@ -184,262 +184,288 @@ function requireAdmin(req: express.Request, res: express.Response, next: express
 
 // --- Authentication ---
 app.post('/api/auth/signup', async (req, res) => {
-  const { email, password } = req.body;
-  if (!email || !password) {
-    return res.status(400).json({ error: 'Email and password are required' });
-  }
-
-  const existingUsers = await getUsers();
-  if (existingUsers.find((u) => u.email.toLowerCase() === email.toLowerCase())) {
-    return res.status(400).json({ error: 'User already exists with this email' });
-  }
-
-  const is_admin = email.toLowerCase() === 'sujoy.yt0077@gmail.com';
-  let userId = 'u-' + crypto.randomUUID();
-  let isVerified = is_admin;
-
-  if (isSupabaseActive()) {
-    try {
-      const supabase = getSupabaseClient();
-      const { data, error } = await supabase.auth.signUp({
-        email: email.toLowerCase(),
-        password: password,
-      });
-
-      if (error) {
-        return res.status(400).json({ error: error.message });
-      }
-
-      if (data.user) {
-        userId = data.user.id;
-        isVerified = data.user.email_confirmed_at ? true : is_admin;
-      }
-    } catch (err: any) {
-      console.error('[Supabase Auth Signup Error]:', err.message);
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
     }
-  }
 
-  const verificationToken = crypto.randomBytes(32).toString('hex');
-  const isVerifiedSupported = existingUsers.length === 0 || ('is_verified' in existingUsers[0]);
+    const existingUsers = await getUsers();
+    if (existingUsers.find((u) => u.email.toLowerCase() === email.toLowerCase())) {
+      return res.status(400).json({ error: 'User already exists with this email' });
+    }
 
-  const newUser: User = {
-    id: userId,
-    email: email.toLowerCase(),
-    is_admin,
-    password_hash: hashPassword(password),
-    is_verified: isVerified || !isVerifiedSupported, // Auto-verify if database schema doesn't support the is_verified column
-    verification_token: (isVerified || !isVerifiedSupported) ? undefined : verificationToken,
-  };
+    const is_admin = email.toLowerCase() === 'sujoy.yt0077@gmail.com';
+    let userId = 'u-' + crypto.randomUUID();
+    let isVerified = is_admin;
 
-  await addUser(newUser);
+    if (isSupabaseActive()) {
+      try {
+        const supabase = getSupabaseClient();
+        const { data, error } = await supabase.auth.signUp({
+          email: email.toLowerCase(),
+          password: password,
+        });
 
-  if (newUser.is_verified || !isVerifiedSupported) {
-    const token = generateToken(newUser);
-    return res.json({ 
-      user: { id: newUser.id, email: newUser.email, is_admin: newUser.is_admin, is_verified: true }, 
-      token, 
-      message: is_admin ? 'Signup successful! Welcome Admin.' : 'Signup successful! Welcome to LensForge.' 
+        if (error) {
+          return res.status(400).json({ error: error.message });
+        }
+
+        if (data.user) {
+          userId = data.user.id;
+          isVerified = data.user.email_confirmed_at ? true : is_admin;
+        }
+      } catch (err: any) {
+        console.error('[Supabase Auth Signup Error]:', err.message);
+      }
+    }
+
+    const verificationToken = crypto.randomBytes(32).toString('hex');
+    const isVerifiedSupported = existingUsers.length === 0 || ('is_verified' in existingUsers[0]);
+
+    const newUser: User = {
+      id: userId,
+      email: email.toLowerCase(),
+      is_admin,
+      password_hash: hashPassword(password),
+      is_verified: isVerified || !isVerifiedSupported, // Auto-verify if database schema doesn't support the is_verified column
+      verification_token: (isVerified || !isVerifiedSupported) ? undefined : verificationToken,
+    };
+
+    await addUser(newUser);
+
+    if (newUser.is_verified || !isVerifiedSupported) {
+      const token = generateToken(newUser);
+      return res.json({ 
+        user: { id: newUser.id, email: newUser.email, is_admin: newUser.is_admin, is_verified: true }, 
+        token, 
+        message: is_admin ? 'Signup successful! Welcome Admin.' : 'Signup successful! Welcome to LensForge.' 
+      });
+    }
+
+    // Generate verification link
+    const appUrl = getAppUrl(req);
+    const verificationLink = `${appUrl}/api/auth/verify-email?token=${verificationToken}`;
+
+    const mailResult = await sendVerificationEmail({
+      email: newUser.email,
+      verificationLink,
     });
+
+    res.json({
+      user: { id: newUser.id, email: newUser.email, is_admin: newUser.is_admin, is_verified: false },
+      message: 'Signup successful! Please check your inbox for a verification email to activate your account.',
+      is_simulated: mailResult.simulated || !mailResult.success,
+      verification_link_simulated: (mailResult.simulated || !mailResult.success) ? verificationLink : null,
+      mail_error: mailResult.success ? null : mailResult.error
+    });
+  } catch (err: any) {
+    console.error('[Signup Endpoint Exception]:', err);
+    res.status(500).json({ error: 'Internal server error during signup', details: err.message || String(err) });
   }
-
-  // Generate verification link
-  const appUrl = getAppUrl(req);
-  const verificationLink = `${appUrl}/api/auth/verify-email?token=${verificationToken}`;
-
-  const mailResult = await sendVerificationEmail({
-    email: newUser.email,
-    verificationLink,
-  });
-
-  res.json({
-    user: { id: newUser.id, email: newUser.email, is_admin: newUser.is_admin, is_verified: false },
-    message: 'Signup successful! Please check your inbox for a verification email to activate your account.',
-    is_simulated: mailResult.simulated || !mailResult.success,
-    verification_link_simulated: (mailResult.simulated || !mailResult.success) ? verificationLink : null,
-    mail_error: mailResult.success ? null : mailResult.error
-  });
 });
 
 app.post('/api/auth/login', async (req, res) => {
-  const { email, password } = req.body;
-  if (!email || !password) {
-    return res.status(400).json({ error: 'Email and password are required' });
-  }
-
-  // Strict check for the admin credentials
-  const isMasterAdmin = email.toLowerCase() === 'sujoy.yt0077@gmail.com' && password === 'sujoy7473';
-  if (email.toLowerCase() === 'sujoy.yt0077@gmail.com' && !isMasterAdmin) {
-    return res.status(401).json({ error: 'Invalid admin credentials' });
-  }
-
-  let supabaseUser: any = null;
-  let useSupabaseAuth = false;
-
-  // Master admin override bypasses Supabase Auth to ensure immediate system entry
-  if (isSupabaseActive() && !isMasterAdmin) {
-    try {
-      const supabase = getSupabaseClient();
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: email.toLowerCase(),
-        password: password,
-      });
-
-      if (error) {
-        return res.status(401).json({ error: error.message });
-      }
-
-      if (data.user) {
-        supabaseUser = data.user;
-        useSupabaseAuth = true;
-      }
-    } catch (err: any) {
-      console.error('[Supabase Auth Login Error]:', err.message);
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
     }
-  }
 
-  const users = await getUsers();
-  let user = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
+    // Strict check for the admin credentials
+    const isMasterAdmin = email.toLowerCase() === 'sujoy.yt0077@gmail.com' && password === 'sujoy7473';
+    if (email.toLowerCase() === 'sujoy.yt0077@gmail.com' && !isMasterAdmin) {
+      return res.status(401).json({ error: 'Invalid admin credentials' });
+    }
 
-  if (useSupabaseAuth && supabaseUser) {
-    if (!user) {
-      user = {
-        id: supabaseUser.id,
-        email: supabaseUser.email || email.toLowerCase(),
-        is_admin: email.toLowerCase() === 'sujoy.yt0077@gmail.com',
-        password_hash: hashPassword(password),
-        is_verified: supabaseUser.email_confirmed_at ? true : (email.toLowerCase() === 'sujoy.yt0077@gmail.com'),
-      };
-      await addUser(user);
-    } else {
-      let changed = false;
-      if (!user.is_verified && supabaseUser.email_confirmed_at) {
-        user.is_verified = true;
-        changed = true;
+    let supabaseUser: any = null;
+    let useSupabaseAuth = false;
+
+    // Master admin override bypasses Supabase Auth to ensure immediate system entry
+    if (isSupabaseActive() && !isMasterAdmin) {
+      try {
+        const supabase = getSupabaseClient();
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: email.toLowerCase(),
+          password: password,
+        });
+
+        if (error) {
+          return res.status(401).json({ error: error.message });
+        }
+
+        if (data.user) {
+          supabaseUser = data.user;
+          useSupabaseAuth = true;
+        }
+      } catch (err: any) {
+        console.error('[Supabase Auth Login Error]:', err.message);
       }
-      if (changed) {
+    }
+
+    const users = await getUsers();
+    let user = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
+
+    if (useSupabaseAuth && supabaseUser) {
+      if (!user) {
+        user = {
+          id: supabaseUser.id,
+          email: supabaseUser.email || email.toLowerCase(),
+          is_admin: email.toLowerCase() === 'sujoy.yt0077@gmail.com',
+          password_hash: hashPassword(password),
+          is_verified: supabaseUser.email_confirmed_at ? true : (email.toLowerCase() === 'sujoy.yt0077@gmail.com'),
+        };
+        await addUser(user);
+      } else {
+        let changed = false;
+        if (!user.is_verified && supabaseUser.email_confirmed_at) {
+          user.is_verified = true;
+          changed = true;
+        }
+        if (changed) {
+          await updateUser(user);
+        }
+      }
+    } else {
+      if (email.toLowerCase() === 'sujoy.yt0077@gmail.com' && !user) {
+        const newAdmin: User = {
+          id: 'admin-uuid-sujoy',
+          email: 'sujoy.yt0077@gmail.com',
+          is_admin: true,
+          password_hash: hashPassword('sujoy7473'),
+          is_verified: true,
+        };
+        await addUser(newAdmin);
+        user = newAdmin;
+      }
+
+      if (!user) {
+        return res.status(401).json({ error: 'Account does not exist. Please sign up first!' });
+      }
+
+      if (user.password_hash) {
+        if (!verifyPassword(password, user.password_hash)) {
+          return res.status(401).json({ error: 'Invalid password' });
+        }
+      } else {
+        user.password_hash = hashPassword(password);
         await updateUser(user);
       }
     }
-  } else {
-    if (email.toLowerCase() === 'sujoy.yt0077@gmail.com' && !user) {
-      const newAdmin: User = {
-        id: 'admin-uuid-sujoy',
-        email: 'sujoy.yt0077@gmail.com',
-        is_admin: true,
-        password_hash: hashPassword('sujoy7473'),
-        is_verified: true,
-      };
-      await addUser(newAdmin);
-      user = newAdmin;
+
+    const isVerifiedSupported = 'is_verified' in user;
+    if (isVerifiedSupported && !user.is_verified && user.email.toLowerCase() !== 'sujoy.yt0077@gmail.com') {
+      const verificationToken = user.verification_token || crypto.randomBytes(32).toString('hex');
+      if (!user.verification_token) {
+        user.verification_token = verificationToken;
+        await updateUser(user);
+      }
+
+      const appUrl = getAppUrl(req);
+      const verificationLink = `${appUrl}/api/auth/verify-email?token=${verificationToken}`;
+
+      return res.status(403).json({
+        error: 'Please verify your email address to log in.',
+        is_unverified: true,
+        email: user.email,
+        is_simulated: true,
+        verification_link_simulated: verificationLink
+      });
     }
+
+    const token = generateToken(user);
+    res.json({ user, token, message: 'Login successful' });
+  } catch (err: any) {
+    console.error('[Login Endpoint Exception]:', err);
+    res.status(500).json({ error: 'Internal server error during login', details: err.message || String(err) });
+  }
+});
+
+app.get('/api/auth/verify-email', async (req, res) => {
+  try {
+    const { token } = req.query;
+    if (!token) {
+      return res.status(400).send(`
+        <div style="font-family: sans-serif; text-align: center; margin-top: 100px;">
+          <h1 style="color: #dc2626;">Verification Token is Missing</h1>
+          <p style="color: #4b5563;">Please check your link and try again.</p>
+          <a href="/" style="display: inline-block; background: #4f46e5; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; margin-top: 20px;">Return to LensForge</a>
+        </div>
+      `);
+    }
+
+    const users = await getUsers();
+    const user = users.find((u) => u.verification_token === token);
 
     if (!user) {
-      return res.status(401).json({ error: 'Account does not exist. Please sign up first!' });
+      return res.status(400).send(`
+        <div style="font-family: sans-serif; text-align: center; margin-top: 100px;">
+          <h1 style="color: #dc2626;">Invalid or Expired Verification Link</h1>
+          <p style="color: #4b5563;">This verification link may have expired or already been used.</p>
+          <a href="/" style="display: inline-block; background: #4f46e5; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; margin-top: 20px;">Return to LensForge</a>
+        </div>
+      `);
     }
 
-    if (user.password_hash) {
-      if (!verifyPassword(password, user.password_hash)) {
-        return res.status(401).json({ error: 'Invalid password' });
-      }
-    } else {
-      user.password_hash = hashPassword(password);
-      await updateUser(user);
-    }
+    user.is_verified = true;
+    user.verification_token = undefined;
+    await updateUser(user);
+
+    const appUrl = getAppUrl(req);
+    res.redirect(`${appUrl}/?verified=true`);
+  } catch (err: any) {
+    console.error('[Verify Email Exception]:', err);
+    res.status(500).send(`
+      <div style="font-family: sans-serif; text-align: center; margin-top: 100px;">
+        <h1 style="color: #dc2626;">Verification Failed</h1>
+        <p style="color: #4b5563;">An internal server error occurred during email verification. Error: ${err.message || String(err)}</p>
+        <a href="/" style="display: inline-block; background: #4f46e5; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; margin-top: 20px;">Return to LensForge</a>
+      </div>
+    `);
   }
+});
 
-  const isVerifiedSupported = 'is_verified' in user;
-  if (isVerifiedSupported && !user.is_verified && user.email.toLowerCase() !== 'sujoy.yt0077@gmail.com') {
-    const verificationToken = user.verification_token || crypto.randomBytes(32).toString('hex');
-    if (!user.verification_token) {
-      user.verification_token = verificationToken;
-      await updateUser(user);
+app.post('/api/auth/resend-verification', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
     }
+
+    const users = await getUsers();
+    const user = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (user.is_verified) {
+      return res.json({ success: true, message: 'This email is already verified.' });
+    }
+
+    const verificationToken = user.verification_token || crypto.randomBytes(32).toString('hex');
+    user.verification_token = verificationToken;
+    await updateUser(user);
 
     const appUrl = getAppUrl(req);
     const verificationLink = `${appUrl}/api/auth/verify-email?token=${verificationToken}`;
 
-    return res.status(403).json({
-      error: 'Please verify your email address to log in.',
-      is_unverified: true,
+    const mailResult = await sendVerificationEmail({
       email: user.email,
-      is_simulated: true,
-      verification_link_simulated: verificationLink
+      verificationLink,
     });
+
+    res.json({
+      success: true,
+      message: 'Verification link resent successfully.',
+      is_simulated: mailResult.simulated || !mailResult.success,
+      verification_link_simulated: (mailResult.simulated || !mailResult.success) ? verificationLink : null,
+      mail_error: mailResult.success ? null : mailResult.error
+    });
+  } catch (err: any) {
+    console.error('[Resend Verification Exception]:', err);
+    res.status(500).json({ error: 'Internal server error while resending verification email', details: err.message || String(err) });
   }
-
-  const token = generateToken(user);
-  res.json({ user, token, message: 'Login successful' });
-});
-
-app.get('/api/auth/verify-email', async (req, res) => {
-  const { token } = req.query;
-  if (!token) {
-    return res.status(400).send(`
-      <div style="font-family: sans-serif; text-align: center; margin-top: 100px;">
-        <h1 style="color: #dc2626;">Verification Token is Missing</h1>
-        <p style="color: #4b5563;">Please check your link and try again.</p>
-        <a href="/" style="display: inline-block; background: #4f46e5; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; margin-top: 20px;">Return to LensForge</a>
-      </div>
-    `);
-  }
-
-  const users = await getUsers();
-  const user = users.find((u) => u.verification_token === token);
-
-  if (!user) {
-    return res.status(400).send(`
-      <div style="font-family: sans-serif; text-align: center; margin-top: 100px;">
-        <h1 style="color: #dc2626;">Invalid or Expired Verification Link</h1>
-        <p style="color: #4b5563;">This verification link may have expired or already been used.</p>
-        <a href="/" style="display: inline-block; background: #4f46e5; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; margin-top: 20px;">Return to LensForge</a>
-      </div>
-    `);
-  }
-
-  user.is_verified = true;
-  user.verification_token = undefined;
-  await updateUser(user);
-
-  const appUrl = getAppUrl(req);
-  res.redirect(`${appUrl}/?verified=true`);
-});
-
-app.post('/api/auth/resend-verification', async (req, res) => {
-  const { email } = req.body;
-  if (!email) {
-    return res.status(400).json({ error: 'Email is required' });
-  }
-
-  const users = await getUsers();
-  const user = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
-
-  if (!user) {
-    return res.status(404).json({ error: 'User not found' });
-  }
-
-  if (user.is_verified) {
-    return res.json({ success: true, message: 'This email is already verified.' });
-  }
-
-  const verificationToken = user.verification_token || crypto.randomBytes(32).toString('hex');
-  user.verification_token = verificationToken;
-  await updateUser(user);
-
-  const appUrl = getAppUrl(req);
-  const verificationLink = `${appUrl}/api/auth/verify-email?token=${verificationToken}`;
-
-  const mailResult = await sendVerificationEmail({
-    email: user.email,
-    verificationLink,
-  });
-
-  res.json({
-    success: true,
-    message: 'Verification link resent successfully.',
-    is_simulated: mailResult.simulated || !mailResult.success,
-    verification_link_simulated: (mailResult.simulated || !mailResult.success) ? verificationLink : null,
-    mail_error: mailResult.success ? null : mailResult.error
-  });
 });
 
 app.get('/api/auth/me', (req, res) => {
