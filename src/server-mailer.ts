@@ -180,6 +180,9 @@ export async function sendVerificationEmail({ email, verificationLink }: SendVer
         user,
         pass,
       },
+      connectionTimeout: 3000, // 3 seconds timeout
+      greetingTimeout: 3000,   // 3 seconds timeout
+      socketTimeout: 3000,     // 3 seconds timeout
     });
 
     await transporter.sendMail({

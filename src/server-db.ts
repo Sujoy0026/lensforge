@@ -134,6 +134,11 @@ CREATE TABLE IF NOT EXISTS public.orders (
 ALTER TABLE public.users DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.products DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.orders DISABLE ROW LEVEL SECURITY;
+
+-- Grant explicit privileges to avoid any permission denied errors for different database roles
+GRANT ALL ON TABLE public.users TO anon, authenticated, service_role, postgres;
+GRANT ALL ON TABLE public.products TO anon, authenticated, service_role, postgres;
+GRANT ALL ON TABLE public.orders TO anon, authenticated, service_role, postgres;
 `
   };
 }
@@ -258,7 +263,7 @@ export async function initDatabase() {
   let localDb = loadLocalDatabase();
   let localSaved = false;
 
-  const hasLocalAdmin = localDb.users.some(u => u.email.toLowerCase() === 'sujoy.yt0077@gmail.com');
+  const hasLocalAdmin = localDb.users.some(u => u.email && u.email.toLowerCase() === 'sujoy.yt0077@gmail.com');
   if (!hasLocalAdmin) {
     localDb.users.push({
       id: 'admin-uuid-sujoy',
@@ -271,7 +276,7 @@ export async function initDatabase() {
     localSaved = true;
   } else {
     // Ensure existing local admin has is_verified = true
-    const localAdmin = localDb.users.find(u => u.email.toLowerCase() === 'sujoy.yt0077@gmail.com');
+    const localAdmin = localDb.users.find(u => u.email && u.email.toLowerCase() === 'sujoy.yt0077@gmail.com');
     if (localAdmin && !localAdmin.is_verified) {
       localAdmin.is_verified = true;
       localSaved = true;
@@ -310,7 +315,7 @@ export async function initDatabase() {
       if (usersErr) {
         console.warn('[Supabase] Could not query "users" table. Please run migration schema in Supabase console:', usersErr.message);
       } else {
-        const hasCloudAdmin = users && users.some((u: any) => u.email.toLowerCase() === 'sujoy.yt0077@gmail.com');
+        const hasCloudAdmin = users && users.some((u: any) => u.email && u.email.toLowerCase() === 'sujoy.yt0077@gmail.com');
         if (!hasCloudAdmin) {
           console.log('[Supabase] Seeding default admin user: sujoy.yt0077@gmail.com...');
           const adminPayload: any = {
@@ -336,7 +341,7 @@ export async function initDatabase() {
             }
             const { error: fallbackSeedErr } = await supabase.from('users').insert([fallbackPayload]);
             if (fallbackSeedErr) {
-              console.error('[Supabase] Failed to seed default admin user fallback:', fallbackSeedErr.message);
+              console.warn('[Supabase] Failed to seed default admin user fallback:', fallbackSeedErr.message);
             } else {
               console.log('[Supabase] Default admin user seeded successfully (fallback, basic columns).');
             }
@@ -366,13 +371,13 @@ export async function initDatabase() {
         }));
         const { error: seedProductsErr } = await supabase.from('products').insert(mappedProducts);
         if (seedProductsErr) {
-          console.error('[Supabase] Failed to seed default products:', seedProductsErr.message);
+          console.warn('[Supabase] Failed to seed default products:', seedProductsErr.message);
         } else {
           console.log('[Supabase] Default products seeded successfully.');
         }
       }
     } catch (e: any) {
-      console.error('[Supabase] Auto-seeding synchronizer failed:', e.message);
+      console.warn('[Supabase] Auto-seeding synchronizer failed:', e.message);
     }
   }
 }
@@ -390,7 +395,7 @@ export async function getProducts(): Promise<Product[]> {
       const productsList = (data || []) as Product[];
       return productsList;
     } catch (err: any) {
-      console.error('[Supabase] Error in getProducts query, serving local database:', err.message);
+      console.warn('[Supabase] Error in getProducts query, serving local database:', err.message);
     }
   }
 
@@ -421,7 +426,7 @@ export async function addProduct(product: Product): Promise<void> {
       console.log(`[Supabase] Successfully inserted product: "${product.name}"`);
       return;
     } catch (err: any) {
-      console.error('[Supabase] Error adding product, updating local database instead:', err.message);
+      console.warn('[Supabase] Error adding product, updating local database instead:', err.message);
     }
   }
 
@@ -443,7 +448,7 @@ export async function deleteProduct(id: string): Promise<boolean> {
       console.log(`[Supabase] Successfully deleted product: ${id}`);
       return true;
     } catch (err: any) {
-      console.error('[Supabase] Error deleting product, updating local database instead:', err.message);
+      console.warn('[Supabase] Error deleting product, updating local database instead:', err.message);
     }
   }
 
@@ -469,7 +474,7 @@ export async function getUsers(): Promise<User[]> {
       if (error) throw error;
       return (data || []) as User[];
     } catch (err: any) {
-      console.error('[Supabase] Error in getUsers query, serving local database:', err.message);
+      console.warn('[Supabase] Error in getUsers query, serving local database:', err.message);
     }
   }
 
@@ -544,13 +549,13 @@ export async function addUser(user: User): Promise<void> {
       console.log(`[Supabase] Successfully added user: "${user.email}"`);
       return;
     } catch (err: any) {
-      console.error('[Supabase] Error adding user, updating local database instead:', err.message);
+      console.warn('[Supabase] Error adding user, updating local database instead:', err.message);
     }
   }
 
   // Local fallback
   const localDb = loadLocalDatabase();
-  if (!localDb.users.find((u) => u.email.toLowerCase() === user.email.toLowerCase())) {
+  if (!localDb.users.find((u) => u.email && u.email.toLowerCase() === user.email.toLowerCase())) {
     localDb.users.push(user);
     saveLocalDatabase(localDb);
   }
@@ -617,7 +622,7 @@ export async function updateUser(updatedUser: User): Promise<void> {
       console.log(`[Supabase] Successfully updated user: "${updatedUser.email}"`);
       return;
     } catch (err: any) {
-      console.error('[Supabase] Error updating user, updating local database instead:', err.message);
+      console.warn('[Supabase] Error updating user, updating local database instead:', err.message);
     }
   }
 
@@ -642,7 +647,7 @@ export async function getOrders(): Promise<Order[]> {
       if (error) throw error;
       return (data || []) as Order[];
     } catch (err: any) {
-      console.error('[Supabase] Error in getOrders query, serving local database:', err.message);
+      console.warn('[Supabase] Error in getOrders query, serving local database:', err.message);
     }
   }
 
@@ -670,7 +675,7 @@ export async function addOrder(order: Order): Promise<void> {
       console.log(`[Supabase] Successfully added order: "${order.id}"`);
       return;
     } catch (err: any) {
-      console.error('[Supabase] Error adding order, updating local database instead:', err.message);
+      console.warn('[Supabase] Error adding order, updating local database instead:', err.message);
     }
   }
 
@@ -695,7 +700,7 @@ export async function updateOrder(id: string, status: 'completed' | 'failed', pa
       console.log(`[Supabase] Successfully updated order status: "${id}" to ${status}`);
       return true;
     } catch (err: any) {
-      console.error('[Supabase] Error updating order, updating local database instead:', err.message);
+      console.warn('[Supabase] Error updating order, updating local database instead:', err.message);
     }
   }
 

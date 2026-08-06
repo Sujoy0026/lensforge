@@ -171,7 +171,7 @@ function requireAdmin(req: express.Request, res: express.Response, next: express
   }
   const token = authHeader.split(' ')[1];
   const user = verifyToken(token);
-  if (!user || !user.is_admin || user.email.toLowerCase() !== 'sujoy.yt0077@gmail.com') {
+  if (!user || !user.is_admin || !user.email || user.email.toLowerCase() !== 'sujoy.yt0077@gmail.com') {
     return res.status(403).json({ error: 'Admin access required (Authorized administrative access only)' });
   }
   (req as any).user = user;
@@ -191,7 +191,7 @@ app.post('/api/auth/signup', async (req, res) => {
     }
 
     const existingUsers = await getUsers();
-    if (existingUsers.find((u) => u.email.toLowerCase() === email.toLowerCase())) {
+    if (existingUsers.find((u) => u.email && u.email.toLowerCase() === email.toLowerCase())) {
       return res.status(400).json({ error: 'User already exists with this email' });
     }
 
@@ -307,7 +307,7 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     const users = await getUsers();
-    let user = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
+    let user = users.find((u) => u.email && u.email.toLowerCase() === email.toLowerCase());
 
     if (useSupabaseAuth && supabaseUser) {
       if (!user) {
@@ -357,7 +357,7 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     const isVerifiedSupported = 'is_verified' in user;
-    if (isVerifiedSupported && !user.is_verified && user.email.toLowerCase() !== 'sujoy.yt0077@gmail.com') {
+    if (isVerifiedSupported && !user.is_verified && (!user.email || user.email.toLowerCase() !== 'sujoy.yt0077@gmail.com')) {
       const verificationToken = user.verification_token || crypto.randomBytes(32).toString('hex');
       if (!user.verification_token) {
         user.verification_token = verificationToken;
@@ -382,7 +382,7 @@ app.post('/api/auth/login', async (req, res) => {
       });
     }
 
-    if (user.email.toLowerCase() === 'sujoy.yt0077@gmail.com') {
+    if (user.email && user.email.toLowerCase() === 'sujoy.yt0077@gmail.com') {
       user.is_verified = true;
     }
 
@@ -446,7 +446,7 @@ app.post('/api/auth/resend-verification', async (req, res) => {
     }
 
     const users = await getUsers();
-    const user = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
+    const user = users.find((u) => u.email && u.email.toLowerCase() === email.toLowerCase());
 
     if (!user) {
       return res.status(404).json({ error: 'User not found' });

@@ -10,7 +10,16 @@
       "email": "sujoy.yt0077@gmail.com",
       "is_admin": true,
       "name": "Sujoy Admin",
-      "password_hash": "c68095210d7016e4491684e947cad78dec173a90d2d34ccf52a3e74de07ab544bb28e7d1abe7093d96feaf586d70ad99fb9f5bd5462ec31df2ed5daad895bec0"
+      "password_hash": "c68095210d7016e4491684e947cad78dec173a90d2d34ccf52a3e74de07ab544bb28e7d1abe7093d96feaf586d70ad99fb9f5bd5462ec31df2ed5daad895bec0",
+      "is_verified": true
+    },
+    {
+      "id": "u-00854ac9-fdf3-465b-b3fc-c29ec2e4184b",
+      "email": "test_another_device_user@example.com",
+      "is_admin": false,
+      "password_hash": "$2b$10$JopKfhn6zkHX83A2GXAmIuhULFwqUWJFzl4Vl4RJAZNsWBPVEYLa.",
+      "is_verified": false,
+      "verification_token": "6db9dd13641952494be3202b70ae113e5b20cdd9dece9b4094e9c06b127c7c49"
     }
   ],
   "products": [
