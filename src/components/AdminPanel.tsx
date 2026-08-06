@@ -66,6 +66,7 @@ export default function AdminPanel({ token, onProductsChange }: AdminPanelProps)
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('All');
   const [selectedTypeFilter, setSelectedTypeFilter] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   // Form State
   const [name, setName] = useState('');
@@ -227,9 +228,7 @@ export default function AdminPanel({ token, onProductsChange }: AdminPanelProps)
     }
   };
 
-  const handleDelete = async (productId: string, productName: string) => {
-    if (!confirm(`Are you sure you want to delete "${productName}" from the catalog? This is permanent.`)) return;
-
+  const handleDelete = async (productId: string) => {
     try {
       const response = await fetch(`/api/products/${productId}`, {
         method: 'DELETE',
@@ -243,6 +242,7 @@ export default function AdminPanel({ token, onProductsChange }: AdminPanelProps)
         setProducts(products.filter((p) => p.id !== productId));
         fetchAdminData();
         onProductsChange?.();
+        setDeleteConfirmId(null);
       } else {
         const errData = await response.json();
         addToast(errData.error || 'Failed to delete product', 'error');
@@ -920,18 +920,39 @@ export default function AdminPanel({ token, onProductsChange }: AdminPanelProps)
                           </td>
 
                           {/* Action Delete */}
-                          <td className="py-4 text-right pr-1">
-                            <button
-                              onClick={() => handleDelete(p.id, p.name)}
-                              className={`p-2 rounded-xl border transition-all cursor-pointer ${
-                                isDark
-                                  ? 'bg-rose-950/20 border-rose-900/30 text-rose-400 hover:bg-rose-950/50 hover:border-rose-800'
-                                  : 'bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200'
-                              }`}
-                              title="Delete Product"
-                            >
-                              <Trash2 size={12} />
-                            </button>
+                          <td className="py-4 text-right pr-1 whitespace-nowrap">
+                            {deleteConfirmId === p.id ? (
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  onClick={() => handleDelete(p.id)}
+                                  className="px-2 py-1 rounded bg-rose-600 text-white text-[10px] font-bold hover:bg-rose-700 transition-colors cursor-pointer"
+                                >
+                                  Delete
+                                </button>
+                                <button
+                                  onClick={() => setDeleteConfirmId(null)}
+                                  className={`px-2 py-1 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
+                                    isDark
+                                      ? 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
+                                      : 'bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200'
+                                  }`}
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => setDeleteConfirmId(p.id)}
+                                className={`p-2 rounded-xl border transition-all cursor-pointer ${
+                                  isDark
+                                    ? 'bg-rose-950/20 border-rose-900/30 text-rose-400 hover:bg-rose-950/50 hover:border-rose-800'
+                                    : 'bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200'
+                                }`}
+                                title="Delete Product"
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            )}
                           </td>
                         </tr>
                       );
