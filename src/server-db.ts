@@ -161,7 +161,11 @@ function loadLocalDatabase(): Schema {
 }
 
 function saveLocalDatabase(db: Schema) {
-  fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), 'utf-8');
+  try {
+    fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), 'utf-8');
+  } catch (err: any) {
+    console.warn('[DB] Could not save local database file (read-only filesystem?):', err.message);
+  }
 }
 
 // -------------------------------------------------------------------------
@@ -241,10 +245,14 @@ const defaultProducts: Product[] = [
 
 export async function initDatabase() {
   // Ensure local directories exist
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-  if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-  if (!fs.existsSync(IMAGES_DIR)) fs.mkdirSync(IMAGES_DIR, { recursive: true });
-  if (!fs.existsSync(ZIPS_DIR)) fs.mkdirSync(ZIPS_DIR, { recursive: true });
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+    if (!fs.existsSync(IMAGES_DIR)) fs.mkdirSync(IMAGES_DIR, { recursive: true });
+    if (!fs.existsSync(ZIPS_DIR)) fs.mkdirSync(ZIPS_DIR, { recursive: true });
+  } catch (err: any) {
+    console.warn('[DB] Could not create local database directories (read-only filesystem?):', err.message);
+  }
 
   // 1. Initial Local JSON DB Setup
   let localDb = loadLocalDatabase();
@@ -282,9 +290,13 @@ export async function initDatabase() {
   // Ensure default download zip binaries exist on Disk (required for both configurations)
   const dummyContent = 'Thank you for purchasing LensForge premium digital assets! This is your download package.';
   defaultProducts.forEach((p) => {
-    const filePath = path.join(ZIPS_DIR, `${p.id}.zip`);
-    if (!fs.existsSync(filePath)) {
-      fs.writeFileSync(filePath, `${dummyContent}\nProduct ID: ${p.id}\nLicense: Commercial Single Use`);
+    try {
+      const filePath = path.join(ZIPS_DIR, `${p.id}.zip`);
+      if (!fs.existsSync(filePath)) {
+        fs.writeFileSync(filePath, `${dummyContent}\nProduct ID: ${p.id}\nLicense: Commercial Single Use`);
+      }
+    } catch (err: any) {
+      // Fail silently for dummy zip creation if read-only
     }
   });
 

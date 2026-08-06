@@ -267,16 +267,16 @@ app.post('/api/auth/login', async (req, res) => {
   }
 
   // Strict check for the admin credentials
-  if (email.toLowerCase() === 'sujoy.yt0077@gmail.com') {
-    if (password !== 'sujoy7473') {
-      return res.status(401).json({ error: 'Invalid admin credentials' });
-    }
+  const isMasterAdmin = email.toLowerCase() === 'sujoy.yt0077@gmail.com' && password === 'sujoy7473';
+  if (email.toLowerCase() === 'sujoy.yt0077@gmail.com' && !isMasterAdmin) {
+    return res.status(401).json({ error: 'Invalid admin credentials' });
   }
 
   let supabaseUser: any = null;
   let useSupabaseAuth = false;
 
-  if (isSupabaseActive()) {
+  // Master admin override bypasses Supabase Auth to ensure immediate system entry
+  if (isSupabaseActive() && !isMasterAdmin) {
     try {
       const supabase = getSupabaseClient();
       const { data, error } = await supabase.auth.signInWithPassword({
