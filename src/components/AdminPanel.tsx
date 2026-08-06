@@ -368,133 +368,135 @@ export default function AdminPanel({ token, onProductsChange }: AdminPanelProps)
       </div>
 
       {/* Database Engine Sync status */}
-      <div className={`border rounded-2xl p-5 ${cardClass} relative overflow-hidden shadow-sm`}>
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-start md:items-center gap-4">
-            <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${
-              supabaseConfig.active
-                ? (isDark ? 'bg-emerald-950/40 text-emerald-400 border border-emerald-900/20' : 'bg-emerald-50 text-emerald-600 border border-emerald-100')
-                : (isDark ? 'bg-amber-950/40 text-amber-400 border border-amber-900/20' : 'bg-amber-50 text-amber-600 border border-amber-100')
-            }`}>
-              {supabaseConfig.active ? <CloudLightning size={22} className="animate-pulse" /> : <Database size={22} />}
-            </div>
-            <div>
-              <div className="flex items-center gap-2.5 flex-wrap">
-                <h3 className={`text-sm font-bold ${isDark ? 'text-white' : 'text-[#0f172a]'}`}>
-                  {supabaseConfig.active ? 'Supabase Production Cloud Storage Active' : 'Sandbox Storage Engine Enabled'}
-                </h3>
-                <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold tracking-wider uppercase flex items-center gap-1.5 ${
-                  supabaseConfig.active
-                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/15'
-                    : 'bg-amber-500/10 text-amber-400 border border-amber-500/15'
-                }`}>
-                  <span className={`w-1.5 h-1.5 rounded-full ${supabaseConfig.active ? 'bg-emerald-500 animate-ping' : 'bg-amber-500'}`} />
-                  {supabaseConfig.active ? 'Cloud Active' : 'Local Sandbox'}
-                </span>
+      {!supabaseConfig.active && (
+        <div className={`border rounded-2xl p-5 ${cardClass} relative overflow-hidden shadow-sm`}>
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-start md:items-center gap-4">
+              <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${
+                supabaseConfig.active
+                  ? (isDark ? 'bg-emerald-950/40 text-emerald-400 border border-emerald-900/20' : 'bg-emerald-50 text-emerald-600 border border-emerald-100')
+                  : (isDark ? 'bg-amber-950/40 text-amber-400 border border-amber-900/20' : 'bg-amber-50 text-amber-600 border border-amber-100')
+              }`}>
+                {supabaseConfig.active ? <CloudLightning size={22} className="animate-pulse" /> : <Database size={22} />}
               </div>
-              <p className={`text-xs mt-1 max-w-3xl ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                {supabaseConfig.active
-                  ? `Authenticated seamlessly with live PostgreSQL cluster. All assets, client profiles, and billing registries are writing and sync'd in real-time.`
-                  : `Currently writing to local filesystem ledger (data/db.json) for rapid offline testing. To unlock server-less scaling and permanent persistence, connect your Supabase account.`}
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={() => setShowSchema(!showSchema)}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border cursor-pointer select-none shrink-0 ${
-              isDark
-                ? 'border-slate-800 text-slate-200 bg-slate-900/50 hover:bg-slate-900'
-                : 'border-slate-200 text-slate-700 bg-slate-50 hover:bg-slate-100'
-            }`}
-          >
-            {showSchema ? 'Hide Setup Console' : 'Supabase Setup Console'}
-          </button>
-        </div>
-
-        {/* Collapsible Setup console */}
-        <AnimatePresence>
-          {showSchema && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.25, ease: 'easeInOut' }}
-              className="mt-5 pt-5 border-t border-slate-200 dark:border-slate-800/80 overflow-hidden"
-            >
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <h4 className={`text-xs font-bold uppercase tracking-wider mb-2.5 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-                    1. Apply PostgreSQL Migration Script
-                  </h4>
-                  <p className={`text-xs mb-3.5 leading-relaxed ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                    Create your tables in Supabase by copying the exact database schema below and pasting it into the <strong className="font-semibold text-indigo-400">SQL Editor</strong> on your Supabase Dashboard.
-                  </p>
-                  
-                  <div className="relative">
-                    <pre className={`text-[11px] font-mono p-4 rounded-xl border overflow-x-auto max-h-[220px] select-all leading-relaxed ${
-                      isDark ? 'bg-[#060608] border-[#222226] text-slate-300' : 'bg-slate-50 border-slate-200 text-slate-700'
-                    }`}>
-                      <code>{supabaseConfig.schemaSql}</code>
-                    </pre>
-                    <button
-                      onClick={handleCopySql}
-                      className="absolute top-2 right-2 p-1.5 rounded-lg bg-slate-900/80 border border-slate-800 text-slate-200 hover:bg-slate-800 transition-all shadow-md cursor-pointer flex items-center gap-1 text-[10px] font-bold"
-                    >
-                      {copiedSql ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
-                      {copiedSql ? 'Copied' : 'Copy SQL'}
-                    </button>
-                  </div>
+              <div>
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <h3 className={`text-sm font-bold ${isDark ? 'text-white' : 'text-[#0f172a]'}`}>
+                    {supabaseConfig.active ? 'Supabase Production Cloud Storage Active' : 'Sandbox Storage Engine Enabled'}
+                  </h3>
+                  <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold tracking-wider uppercase flex items-center gap-1.5 ${
+                    supabaseConfig.active
+                      ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/15'
+                      : 'bg-amber-500/10 text-amber-400 border border-amber-500/15'
+                  }`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${supabaseConfig.active ? 'bg-emerald-500 animate-ping' : 'bg-amber-500'}`} />
+                    {supabaseConfig.active ? 'Cloud Active' : 'Local Sandbox'}
+                  </span>
                 </div>
+                <p className={`text-xs mt-1 max-w-3xl ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                  {supabaseConfig.active
+                    ? `Authenticated seamlessly with live PostgreSQL cluster. All assets, client profiles, and billing registries are writing and sync'd in real-time.`
+                    : `Currently writing to local filesystem ledger (data/db.json) for rapid offline testing. To unlock server-less scaling and permanent persistence, connect your Supabase account.`}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowSchema(!showSchema)}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border cursor-pointer select-none shrink-0 ${
+                isDark
+                  ? 'border-slate-800 text-slate-200 bg-slate-900/50 hover:bg-slate-900'
+                  : 'border-slate-200 text-slate-700 bg-slate-50 hover:bg-slate-100'
+              }`}
+            >
+              {showSchema ? 'Hide Setup Console' : 'Supabase Setup Console'}
+            </button>
+          </div>
 
-                <div className="flex flex-col justify-between">
+          {/* Collapsible Setup console */}
+          <AnimatePresence>
+            {showSchema && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.25, ease: 'easeInOut' }}
+                className="mt-5 pt-5 border-t border-slate-200 dark:border-slate-800/80 overflow-hidden"
+              >
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <h4 className={`text-xs font-bold uppercase tracking-wider mb-2.5 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-                      2. Configure Environment Secrets
+                      1. Apply PostgreSQL Migration Script
                     </h4>
-                    <p className={`text-xs mb-4 leading-relaxed ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                      Once tables are provisioned, open the <strong className="font-semibold text-indigo-400">Settings/Secrets panel</strong> in your AI Studio UI and register the following variables to synchronize automatically:
+                    <p className={`text-xs mb-3.5 leading-relaxed ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                      Create your tables in Supabase by copying the exact database schema below and pasting it into the <strong className="font-semibold text-indigo-400">SQL Editor</strong> on your Supabase Dashboard.
                     </p>
-
-                    <div className="space-y-2 text-xs font-mono">
-                      <div className={`p-2.5 rounded-lg border flex items-center justify-between ${isDark ? 'bg-slate-950/40 border-slate-800/80' : 'bg-slate-50 border-slate-200'}`}>
-                        <div className="flex flex-col">
-                          <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Secret Name</span>
-                          <span className={`font-semibold ${isDark ? 'text-white' : 'text-slate-800'}`}>SUPABASE_URL</span>
-                        </div>
-                        <span className="text-[10px] text-slate-400 uppercase bg-slate-500/10 px-2 py-0.5 rounded-full">Required</span>
-                      </div>
-
-                      <div className={`p-2.5 rounded-lg border flex items-center justify-between ${isDark ? 'bg-slate-950/40 border-slate-800/80' : 'bg-slate-50 border-slate-200'}`}>
-                        <div className="flex flex-col">
-                          <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Secret Name</span>
-                          <span className={`font-semibold ${isDark ? 'text-white' : 'text-slate-800'}`}>SUPABASE_ANON_KEY</span>
-                        </div>
-                        <span className="text-[10px] text-slate-400 uppercase bg-slate-500/10 px-2 py-0.5 rounded-full">Required</span>
-                      </div>
+                    
+                    <div className="relative">
+                      <pre className={`text-[11px] font-mono p-4 rounded-xl border overflow-x-auto max-h-[220px] select-all leading-relaxed ${
+                        isDark ? 'bg-[#060608] border-[#222226] text-slate-300' : 'bg-slate-50 border-slate-200 text-slate-700'
+                      }`}>
+                        <code>{supabaseConfig.schemaSql}</code>
+                      </pre>
+                      <button
+                        onClick={handleCopySql}
+                        className="absolute top-2 right-2 p-1.5 rounded-lg bg-slate-900/80 border border-slate-800 text-slate-200 hover:bg-slate-800 transition-all shadow-md cursor-pointer flex items-center gap-1 text-[10px] font-bold"
+                      >
+                        {copiedSql ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                        {copiedSql ? 'Copied' : 'Copy SQL'}
+                      </button>
                     </div>
                   </div>
 
-                  <div className={`mt-4 p-3.5 rounded-xl border flex items-start gap-3 ${
-                    supabaseConfig.active
-                      ? (isDark ? 'bg-emerald-950/10 border-emerald-900/30 text-emerald-400' : 'bg-emerald-50 border-emerald-200 text-emerald-800')
-                      : (isDark ? 'bg-[#18181b] border-slate-800 text-slate-400' : 'bg-slate-50 border-slate-200 text-slate-600')
-                  }`}>
-                    <Database size={16} className="shrink-0 mt-0.5" />
+                  <div className="flex flex-col justify-between">
                     <div>
-                      <h5 className="text-[11px] font-bold uppercase tracking-wider">Engine status check</h5>
-                      <p className="text-xs mt-0.5 leading-normal">
-                        {supabaseConfig.active
-                          ? 'Integration online. All CRUD ledger transactions bypass local storage and bind instantly with your cloud PostgreSQL instance.'
-                          : 'Currently operating in zero-setup Local Sandbox. Adding credentials will instantly auto-migrate schema and default products.'}
+                      <h4 className={`text-xs font-bold uppercase tracking-wider mb-2.5 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+                        2. Configure Environment Secrets
+                      </h4>
+                      <p className={`text-xs mb-4 leading-relaxed ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                        Once tables are provisioned, open the <strong className="font-semibold text-indigo-400">Settings/Secrets panel</strong> in your AI Studio UI and register the following variables to synchronize automatically:
                       </p>
+
+                      <div className="space-y-2 text-xs font-mono">
+                        <div className={`p-2.5 rounded-lg border flex items-center justify-between ${isDark ? 'bg-slate-950/40 border-slate-800/80' : 'bg-slate-50 border-slate-200'}`}>
+                          <div className="flex flex-col">
+                            <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Secret Name</span>
+                            <span className={`font-semibold ${isDark ? 'text-white' : 'text-slate-800'}`}>SUPABASE_URL</span>
+                          </div>
+                          <span className="text-[10px] text-slate-400 uppercase bg-slate-500/10 px-2 py-0.5 rounded-full">Required</span>
+                        </div>
+
+                        <div className={`p-2.5 rounded-lg border flex items-center justify-between ${isDark ? 'bg-slate-950/40 border-slate-800/80' : 'bg-slate-50 border-slate-200'}`}>
+                          <div className="flex flex-col">
+                            <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Secret Name</span>
+                            <span className={`font-semibold ${isDark ? 'text-white' : 'text-slate-800'}`}>SUPABASE_ANON_KEY</span>
+                          </div>
+                          <span className="text-[10px] text-slate-400 uppercase bg-slate-500/10 px-2 py-0.5 rounded-full">Required</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className={`mt-4 p-3.5 rounded-xl border flex items-start gap-3 ${
+                      supabaseConfig.active
+                        ? (isDark ? 'bg-emerald-950/10 border-emerald-900/30 text-emerald-400' : 'bg-emerald-50 border-emerald-200 text-emerald-800')
+                        : (isDark ? 'bg-[#18181b] border-slate-800 text-slate-400' : 'bg-slate-50 border-slate-200 text-slate-600')
+                    }`}>
+                      <Database size={16} className="shrink-0 mt-0.5" />
+                      <div>
+                        <h5 className="text-[11px] font-bold uppercase tracking-wider">Engine status check</h5>
+                        <p className="text-xs mt-0.5 leading-normal">
+                          {supabaseConfig.active
+                            ? 'Integration online. All CRUD ledger transactions bypass local storage and bind instantly with your cloud PostgreSQL instance.'
+                            : 'Currently operating in zero-setup Local Sandbox. Adding credentials will instantly auto-migrate schema and default products.'}
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
 
       {/* Main Core Columns */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">

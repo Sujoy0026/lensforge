@@ -75,6 +75,11 @@ export function isSupabaseActive(): boolean {
   return false;
 }
 
+export function getSupabaseClient() {
+  isSupabaseActive();
+  return supabase;
+}
+
 export function getSupabaseConfig() {
   return {
     active: isSupabaseActive(),

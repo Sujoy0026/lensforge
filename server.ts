@@ -20,6 +20,8 @@ import {
   getSupabaseConfig,
   hashPassword,
   verifyPassword,
+  isSupabaseActive,
+  getSupabaseClient,
 } from './src/server-db.js';
 import { Product, User, Order } from './src/types.js';
 import { sendVerificationEmail } from './src/server-mailer.js';
@@ -193,21 +195,45 @@ app.post('/api/auth/signup', async (req, res) => {
   }
 
   const is_admin = email.toLowerCase() === 'sujoy.yt0077@gmail.com';
+  let userId = 'u-' + crypto.randomUUID();
+  let isVerified = is_admin;
+
+  if (isSupabaseActive()) {
+    try {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase.auth.signUp({
+        email: email.toLowerCase(),
+        password: password,
+      });
+
+      if (error) {
+        return res.status(400).json({ error: error.message });
+      }
+
+      if (data.user) {
+        userId = data.user.id;
+        isVerified = data.user.email_confirmed_at ? true : is_admin;
+      }
+    } catch (err: any) {
+      console.error('[Supabase Auth Signup Error]:', err.message);
+    }
+  }
+
   const verificationToken = crypto.randomBytes(32).toString('hex');
   const isVerifiedSupported = existingUsers.length === 0 || ('is_verified' in existingUsers[0]);
 
   const newUser: User = {
-    id: 'u-' + crypto.randomUUID(),
+    id: userId,
     email: email.toLowerCase(),
     is_admin,
     password_hash: hashPassword(password),
-    is_verified: is_admin || !isVerifiedSupported, // Auto-verify if database schema doesn't support the is_verified column
-    verification_token: (is_admin || !isVerifiedSupported) ? undefined : verificationToken,
+    is_verified: isVerified || !isVerifiedSupported, // Auto-verify if database schema doesn't support the is_verified column
+    verification_token: (isVerified || !isVerifiedSupported) ? undefined : verificationToken,
   };
 
   await addUser(newUser);
 
-  if (is_admin || !isVerifiedSupported) {
+  if (newUser.is_verified || !isVerifiedSupported) {
     const token = generateToken(newUser);
     return res.json({ 
       user: { id: newUser.id, email: newUser.email, is_admin: newUser.is_admin, is_verified: true }, 
@@ -240,16 +266,62 @@ app.post('/api/auth/login', async (req, res) => {
     return res.status(400).json({ error: 'Email and password are required' });
   }
 
-  const users = await getUsers();
-  const user = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
-
   // Strict check for the admin credentials
   if (email.toLowerCase() === 'sujoy.yt0077@gmail.com') {
     if (password !== 'sujoy7473') {
       return res.status(401).json({ error: 'Invalid admin credentials' });
     }
-    // If admin doesn't exist in the database yet, register them dynamically
+  }
+
+  let supabaseUser: any = null;
+  let useSupabaseAuth = false;
+
+  if (isSupabaseActive()) {
+    try {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.toLowerCase(),
+        password: password,
+      });
+
+      if (error) {
+        return res.status(401).json({ error: error.message });
+      }
+
+      if (data.user) {
+        supabaseUser = data.user;
+        useSupabaseAuth = true;
+      }
+    } catch (err: any) {
+      console.error('[Supabase Auth Login Error]:', err.message);
+    }
+  }
+
+  const users = await getUsers();
+  let user = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
+
+  if (useSupabaseAuth && supabaseUser) {
     if (!user) {
+      user = {
+        id: supabaseUser.id,
+        email: supabaseUser.email || email.toLowerCase(),
+        is_admin: email.toLowerCase() === 'sujoy.yt0077@gmail.com',
+        password_hash: hashPassword(password),
+        is_verified: supabaseUser.email_confirmed_at ? true : (email.toLowerCase() === 'sujoy.yt0077@gmail.com'),
+      };
+      await addUser(user);
+    } else {
+      let changed = false;
+      if (!user.is_verified && supabaseUser.email_confirmed_at) {
+        user.is_verified = true;
+        changed = true;
+      }
+      if (changed) {
+        await updateUser(user);
+      }
+    }
+  } else {
+    if (email.toLowerCase() === 'sujoy.yt0077@gmail.com' && !user) {
       const newAdmin: User = {
         id: 'admin-uuid-sujoy',
         email: 'sujoy.yt0077@gmail.com',
@@ -258,26 +330,23 @@ app.post('/api/auth/login', async (req, res) => {
         is_verified: true,
       };
       await addUser(newAdmin);
-      const token = generateToken(newAdmin);
-      return res.json({ user: newAdmin, token, message: 'Admin account created and logged in successfully' });
+      user = newAdmin;
+    }
+
+    if (!user) {
+      return res.status(401).json({ error: 'Account does not exist. Please sign up first!' });
+    }
+
+    if (user.password_hash) {
+      if (!verifyPassword(password, user.password_hash)) {
+        return res.status(401).json({ error: 'Invalid password' });
+      }
+    } else {
+      user.password_hash = hashPassword(password);
+      await updateUser(user);
     }
   }
 
-  if (!user) {
-    return res.status(401).json({ error: 'Account does not exist. Please sign up first!' });
-  }
-
-  // If password_hash is stored, check it
-  if (user.password_hash) {
-    if (!verifyPassword(password, user.password_hash)) {
-      return res.status(401).json({ error: 'Invalid password' });
-    }
-  } else {
-    user.password_hash = hashPassword(password);
-    await updateUser(user);
-  }
-
-  // Enforce Email Verification Check for non-admin customers only if supported by the database schema
   const isVerifiedSupported = 'is_verified' in user;
   if (isVerifiedSupported && !user.is_verified && user.email.toLowerCase() !== 'sujoy.yt0077@gmail.com') {
     const verificationToken = user.verification_token || crypto.randomBytes(32).toString('hex');
@@ -712,6 +781,9 @@ process.on('unhandledRejection', (reason: any) => {
    VITE DEV SERVER / PRODUCTION SERVING
    ========================================================================== */
 
+// Export app for serverless deployment (e.g. Vercel)
+export default app;
+
 async function startServer() {
   // Initialize and seed database (Supabase or local file JSON fallback)
   try {
@@ -741,4 +813,9 @@ async function startServer() {
   });
 }
 
-startServer();
+if (!process.env.VERCEL) {
+  startServer();
+} else {
+  // On Vercel, initialize database asynchronously
+  initDatabase().catch(err => console.error('[Supabase/Vercel] Database async initialization error:', err.message));
+}
