@@ -137,6 +137,16 @@ function verifyToken(token: string | undefined): User | null {
   }
 }
 
+// Dynamic App URL Helper
+function getAppUrl(req: express.Request): string {
+  if (process.env.APP_URL) {
+    return process.env.APP_URL.replace(/\/$/, '');
+  }
+  const host = req.get('host') || 'localhost:3000';
+  const protocol = req.headers['x-forwarded-proto'] === 'https' || req.protocol === 'https' ? 'https' : 'http';
+  return `${protocol}://${host}`;
+}
+
 // Auth Middleware
 function requireAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
   const authHeader = req.headers.authorization;
@@ -207,7 +217,7 @@ app.post('/api/auth/signup', async (req, res) => {
   }
 
   // Generate verification link
-  const appUrl = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+  const appUrl = getAppUrl(req);
   const verificationLink = `${appUrl}/api/auth/verify-email?token=${verificationToken}`;
 
   const mailResult = await sendVerificationEmail({
@@ -276,7 +286,7 @@ app.post('/api/auth/login', async (req, res) => {
       await updateUser(user);
     }
 
-    const appUrl = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+    const appUrl = getAppUrl(req);
     const verificationLink = `${appUrl}/api/auth/verify-email?token=${verificationToken}`;
 
     return res.status(403).json({
@@ -321,7 +331,7 @@ app.get('/api/auth/verify-email', async (req, res) => {
   user.verification_token = undefined;
   await updateUser(user);
 
-  const appUrl = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+  const appUrl = getAppUrl(req);
   res.redirect(`${appUrl}/?verified=true`);
 });
 
@@ -346,7 +356,7 @@ app.post('/api/auth/resend-verification', async (req, res) => {
   user.verification_token = verificationToken;
   await updateUser(user);
 
-  const appUrl = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+  const appUrl = getAppUrl(req);
   const verificationLink = `${appUrl}/api/auth/verify-email?token=${verificationToken}`;
 
   const mailResult = await sendVerificationEmail({
