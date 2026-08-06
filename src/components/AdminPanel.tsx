@@ -30,9 +30,10 @@ import { useTheme } from '../context/ThemeContext.tsx';
 
 interface AdminPanelProps {
   token: string;
+  onProductsChange?: () => void;
 }
 
-export default function AdminPanel({ token }: AdminPanelProps) {
+export default function AdminPanel({ token, onProductsChange }: AdminPanelProps) {
   const { isDark } = useTheme();
 
   // Platform Metrics & Product states
@@ -217,6 +218,7 @@ export default function AdminPanel({ token }: AdminPanelProps) {
 
       // Reload
       fetchAdminData();
+      onProductsChange?.();
     } catch (err: any) {
       setFormError(err.message || 'Error occurred while saving product');
       addToast(err.message || 'Publishing failed.', 'error');
@@ -240,6 +242,7 @@ export default function AdminPanel({ token }: AdminPanelProps) {
         addToast('Asset removed from database.', 'success');
         setProducts(products.filter((p) => p.id !== productId));
         fetchAdminData();
+        onProductsChange?.();
       } else {
         const errData = await response.json();
         addToast(errData.error || 'Failed to delete product', 'error');

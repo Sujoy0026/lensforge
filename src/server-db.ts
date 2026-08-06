@@ -371,9 +371,6 @@ export async function getProducts(): Promise<Product[]> {
 
       if (error) throw error;
       const productsList = (data || []) as Product[];
-      if (productsList.length === 0) {
-        return defaultProducts;
-      }
       return productsList;
     } catch (err: any) {
       console.error('[Supabase] Error in getProducts query, serving local database:', err.message);

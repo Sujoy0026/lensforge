@@ -470,7 +470,7 @@ export default function App() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -15 }}
             >
-              <AdminPanel token={token} />
+              <AdminPanel token={token} onProductsChange={fetchProducts} />
             </motion.div>
           )}
 
