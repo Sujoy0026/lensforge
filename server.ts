@@ -231,17 +231,58 @@ app.post('/api/auth/signup', async (req, res) => {
         const supabaseServiceClient = getSupabaseServiceClient();
         if (supabaseServiceClient) {
           try {
-            const adminResult = await supabaseServiceClient.auth.admin.createUser({
-              email: normalizedEmail,
-              password: password,
-              email_confirm: true
-            });
-            if (!adminResult.error && adminResult.data?.user) {
-              signUpUser = adminResult.data.user;
-              signUpError = null;
-            } else if (adminResult.error) {
-              console.error('[Signup Admin Retry Error]:', adminResult.error.message);
-              signUpError = adminResult.error;
+            // First, check if the user was actually created in Supabase Auth despite the SMTP failure
+            const { data: listData, error: listError } = await supabaseServiceClient.auth.admin.listUsers();
+            if (!listError && listData?.users) {
+              const existingAuthUser = listData.users.find(u => u.email?.toLowerCase() === normalizedEmail);
+              if (existingAuthUser) {
+                console.log(`[Signup] Found partially-created user "${existingAuthUser.id}" in auth.users. Marking email as confirmed...`);
+                const { data: updateData, error: updateError } = await supabaseServiceClient.auth.admin.updateUserById(
+                  existingAuthUser.id,
+                  { email_confirm: true }
+                );
+                if (!updateError && updateData?.user) {
+                  signUpUser = updateData.user;
+                  signUpError = null;
+                } else if (updateError) {
+                  console.error('[Signup Admin Update Error]:', updateError.message);
+                  signUpError = updateError;
+                }
+              }
+            }
+
+            // If the user was NOT partially created, create them fresh with auto-confirm
+            if (signUpError && !signUpUser) {
+              const adminResult = await supabaseServiceClient.auth.admin.createUser({
+                email: normalizedEmail,
+                password: password,
+                email_confirm: true
+              });
+              if (!adminResult.error && adminResult.data?.user) {
+                signUpUser = adminResult.data.user;
+                signUpError = null;
+              } else if (adminResult.error) {
+                // If it fails with "Email already registered" because of race conditions, try to fetch the user again
+                if (adminResult.error.message?.toLowerCase().includes('already') || adminResult.error.status === 422) {
+                  console.log('[Signup] Admin create conflict. Fetching user again...');
+                  const { data: secondList, error: secondListErr } = await supabaseServiceClient.auth.admin.listUsers();
+                  const fallbackUser = secondList?.users?.find(u => u.email?.toLowerCase() === normalizedEmail);
+                  if (fallbackUser) {
+                    // Try to confirm it
+                    const { data: confirmData } = await supabaseServiceClient.auth.admin.updateUserById(
+                      fallbackUser.id,
+                      { email_confirm: true }
+                    );
+                    signUpUser = confirmData?.user || fallbackUser;
+                    signUpError = null;
+                  } else {
+                    signUpError = adminResult.error;
+                  }
+                } else {
+                  console.error('[Signup Admin Retry Error]:', adminResult.error.message);
+                  signUpError = adminResult.error;
+                }
+              }
             }
           } catch (adminErr: any) {
             console.error('[Signup Admin Retry Exception]:', adminErr?.message ?? adminErr);
