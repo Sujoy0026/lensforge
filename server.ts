@@ -421,14 +421,14 @@ app.post('/api/auth/signup', async (req, res) => {
 
 app.post('/api/auth/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password are required' });
+    const { email, password } = req.body ?? {};
+    if (typeof email !== 'string' || typeof password !== 'string') {
+      return res.status(400).json({ error: 'Email and password must be strings' });
     }
 
-    // Strict check for the admin credentials
-    const isMasterAdmin = email.toLowerCase() === 'sujoy.yt0077@gmail.com' && password === 'sujoy7473';
-    if (email.toLowerCase() === 'sujoy.yt0077@gmail.com' && !isMasterAdmin) {
+    const trimmedEmail = email.trim().toLowerCase();
+    const isMasterAdmin = trimmedEmail === 'sujoy.yt0077@gmail.com' && password === 'sujoy7473';
+    if (trimmedEmail === 'sujoy.yt0077@gmail.com' && !isMasterAdmin) {
       return res.status(401).json({ error: 'Invalid admin credentials' });
     }
 
@@ -589,13 +589,14 @@ app.get('/api/auth/verify-email', async (req, res) => {
 
 app.post('/api/auth/resend-verification', async (req, res) => {
   try {
-    const { email } = req.body;
-    if (!email) {
-      return res.status(400).json({ error: 'Email is required' });
+    const { email } = req.body ?? {};
+    if (typeof email !== 'string') {
+      return res.status(400).json({ error: 'Email must be a string' });
     }
 
+    const trimmedEmail = email.trim().toLowerCase();
     const users = await getUsers();
-    const user = users.find((u) => u.email && u.email.toLowerCase() === email.toLowerCase());
+    const user = users.find((u) => u.email && u.email.toLowerCase() === trimmedEmail);
 
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
