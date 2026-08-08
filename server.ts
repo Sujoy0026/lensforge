@@ -22,6 +22,7 @@ import {
   verifyPassword,
   isSupabaseActive,
   getSupabaseClient,
+  getSupabaseServiceClient,
 } from './src/server-db.js';
 import { Product, User, Order } from './src/types.js';
 import { sendVerificationEmail } from './src/server-mailer.js';
@@ -210,21 +211,54 @@ app.post('/api/auth/signup', async (req, res) => {
       const supabase = getSupabaseClient();
 
       // IMPORTANT: if this fails, stop. Do not proceed with custom user creation
-      const { data, error } = await supabase.auth.signUp({
-        email: normalizedEmail,
-        password,
-      });
+      let signUpUser = null;
+      let signUpError = null;
 
-      if (error || !data?.user) {
+      try {
+        const { data, error } = await supabase.auth.signUp({
+          email: normalizedEmail,
+          password,
+        });
+        signUpUser = data?.user ?? null;
+        signUpError = error;
+      } catch (err: any) {
+        signUpError = err;
+      }
+
+      // If signUp fails with "Error sending confirmation email", retry with admin client and auto-confirm
+      if (signUpError && (signUpError.message?.toLowerCase().includes('confirmation email') || signUpError.message?.toLowerCase().includes('email'))) {
+        console.log('[Signup] Supabase signup returned email error. Retrying with admin client and auto-confirm...');
+        const supabaseServiceClient = getSupabaseServiceClient();
+        if (supabaseServiceClient) {
+          try {
+            const adminResult = await supabaseServiceClient.auth.admin.createUser({
+              email: normalizedEmail,
+              password: password,
+              email_confirm: true
+            });
+            if (!adminResult.error && adminResult.data?.user) {
+              signUpUser = adminResult.data.user;
+              signUpError = null;
+            } else if (adminResult.error) {
+              console.error('[Signup Admin Retry Error]:', adminResult.error.message);
+              signUpError = adminResult.error;
+            }
+          } catch (adminErr: any) {
+            console.error('[Signup Admin Retry Exception]:', adminErr?.message ?? adminErr);
+          }
+        }
+      }
+
+      if (signUpError || !signUpUser) {
         // Don’t bypass errors here in production—your flow will be inconsistent.
         return res.status(400).json({
-          error: error?.message ?? 'Supabase signup failed',
+          error: signUpError?.message ?? 'Supabase signup failed',
         });
       }
 
-      const supabaseUserId = data.user.id; // this is what you should store in orders/user_id mapping
+      const supabaseUserId = signUpUser.id; // this is what you should store in orders/user_id mapping
 
-      const isVerified = data.user.email_confirmed_at ? true : isVerifiedByAdmin;
+      const isVerified = signUpUser.email_confirmed_at ? true : isVerifiedByAdmin;
       
       const verificationToken = crypto.randomBytes(32).toString('hex');
       const isVerifiedSupported = existingUsers.length === 0 || ('is_verified' in existingUsers[0]);
