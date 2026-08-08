@@ -562,7 +562,7 @@ export async function addUser(user: User): Promise<void> {
 
       const { error } = await supabase
         .from('users')
-        .insert([payload]);
+        .upsert([payload], { onConflict: 'id' });
 
       if (error) {
         // If password_hash, is_verified, or verification_token columns do not exist in users table yet, fallback and try inserting with only core columns
@@ -584,19 +584,19 @@ export async function addUser(user: User): Promise<void> {
           }
           const { error: retryError } = await supabase
             .from('users')
-            .insert([fallbackPayload]);
+            .upsert([fallbackPayload], { onConflict: 'id' });
           
           if (retryError) {
             // Absolute minimal fallback
             logSupabaseStatus('Retrying registration with absolute minimum information...');
             const { error: minimalError } = await supabase
               .from('users')
-              .insert([{
+              .upsert([{
                 id: user.id,
                 email: user.email,
                 is_admin: user.is_admin,
                 name: user.name || null
-              }]);
+              }], { onConflict: 'id' });
             if (minimalError) throw minimalError;
           }
         } else {

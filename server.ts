@@ -213,6 +213,7 @@ app.post('/api/auth/signup', async (req, res) => {
       // IMPORTANT: if this fails, stop. Do not proceed with custom user creation
       let signUpUser = null;
       let signUpError = null;
+      let autoConfirmed = false;
 
       try {
         const { data, error } = await supabase.auth.signUp({
@@ -226,8 +227,13 @@ app.post('/api/auth/signup', async (req, res) => {
       }
 
       // If signUp fails with "Error sending confirmation email", retry with admin client and auto-confirm
-      if (signUpError && (signUpError.message?.toLowerCase().includes('confirmation email') || signUpError.message?.toLowerCase().includes('email'))) {
-        console.log('[Signup] Supabase signup returned email error. Retrying with admin client and auto-confirm...');
+      const isSmtpError = signUpError && (
+        signUpError.message === 'Error sending confirmation email' || 
+        signUpError.message?.toLowerCase().includes('confirmation email')
+      );
+
+      if (isSmtpError) {
+        console.log('[Signup] Supabase signup returned email confirmation error. Retrying with admin client...');
         const supabaseServiceClient = getSupabaseServiceClient();
         if (supabaseServiceClient) {
           try {
@@ -236,17 +242,25 @@ app.post('/api/auth/signup', async (req, res) => {
             if (!listError && listData?.users) {
               const existingAuthUser = listData.users.find(u => u.email?.toLowerCase() === normalizedEmail);
               if (existingAuthUser) {
-                console.log(`[Signup] Found partially-created user "${existingAuthUser.id}" in auth.users. Marking email as confirmed...`);
-                const { data: updateData, error: updateError } = await supabaseServiceClient.auth.admin.updateUserById(
-                  existingAuthUser.id,
-                  { email_confirm: true }
-                );
-                if (!updateError && updateData?.user) {
-                  signUpUser = updateData.user;
+                if (!existingAuthUser.email_confirmed_at) {
+                  console.log(`[Signup] Found partially-created unconfirmed user "${existingAuthUser.id}" in auth.users. Marking email as confirmed...`);
+                  const { data: updateData, error: updateError } = await supabaseServiceClient.auth.admin.updateUserById(
+                    existingAuthUser.id,
+                    { email_confirm: true }
+                  );
+                  if (!updateError && updateData?.user) {
+                    signUpUser = updateData.user;
+                    signUpError = null;
+                    autoConfirmed = true;
+                  } else if (updateError) {
+                    console.error('[Signup Admin Update Error]:', updateError.message);
+                    signUpError = updateError;
+                  }
+                } else {
+                  console.log(`[Signup] Found partially-created already-confirmed user "${existingAuthUser.id}". Proceeding...`);
+                  signUpUser = existingAuthUser;
                   signUpError = null;
-                } else if (updateError) {
-                  console.error('[Signup Admin Update Error]:', updateError.message);
-                  signUpError = updateError;
+                  autoConfirmed = true;
                 }
               }
             }
@@ -261,20 +275,29 @@ app.post('/api/auth/signup', async (req, res) => {
               if (!adminResult.error && adminResult.data?.user) {
                 signUpUser = adminResult.data.user;
                 signUpError = null;
+                autoConfirmed = true;
               } else if (adminResult.error) {
                 // If it fails with "Email already registered" because of race conditions, try to fetch the user again
-                if (adminResult.error.message?.toLowerCase().includes('already') || adminResult.error.status === 422) {
+                const isConflict = adminResult.error.message?.toLowerCase().includes('already') || 
+                                   adminResult.error.status === 422 || 
+                                   adminResult.error.code === 'email_exists';
+                if (isConflict) {
                   console.log('[Signup] Admin create conflict. Fetching user again...');
-                  const { data: secondList, error: secondListErr } = await supabaseServiceClient.auth.admin.listUsers();
+                  const { data: secondList } = await supabaseServiceClient.auth.admin.listUsers();
                   const fallbackUser = secondList?.users?.find(u => u.email?.toLowerCase() === normalizedEmail);
                   if (fallbackUser) {
-                    // Try to confirm it
-                    const { data: confirmData } = await supabaseServiceClient.auth.admin.updateUserById(
-                      fallbackUser.id,
-                      { email_confirm: true }
-                    );
-                    signUpUser = confirmData?.user || fallbackUser;
+                    if (!fallbackUser.email_confirmed_at) {
+                      // Try to confirm it
+                      const { data: confirmData } = await supabaseServiceClient.auth.admin.updateUserById(
+                        fallbackUser.id,
+                        { email_confirm: true }
+                      );
+                      signUpUser = confirmData?.user || fallbackUser;
+                    } else {
+                      signUpUser = fallbackUser;
+                    }
                     signUpError = null;
+                    autoConfirmed = true;
                   } else {
                     signUpError = adminResult.error;
                   }
@@ -299,7 +322,7 @@ app.post('/api/auth/signup', async (req, res) => {
 
       const supabaseUserId = signUpUser.id; // this is what you should store in orders/user_id mapping
 
-      const isVerified = signUpUser.email_confirmed_at ? true : isVerifiedByAdmin;
+      const isVerified = (signUpUser.email_confirmed_at || autoConfirmed) ? true : isVerifiedByAdmin;
       
       const verificationToken = crypto.randomBytes(32).toString('hex');
       const isVerifiedSupported = existingUsers.length === 0 || ('is_verified' in existingUsers[0]);
