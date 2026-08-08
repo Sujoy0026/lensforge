@@ -84,21 +84,24 @@ export function isSupabaseActive(): boolean {
   if (supabaseConnectionFailed) {
     return false;
   }
-  if (SUPABASE_URL && SUPABASE_ANON_KEY) {
+  
+  // Safe runtime check to verify presence of environment keys
+  console.log('[Supabase Debug] SUPABASE_ANON_KEY present:', !!SUPABASE_ANON_KEY);
+  console.log('[Supabase Debug] SUPABASE_SERVICE_ROLE_KEY present:', !!SUPABASE_SERVICE_ROLE_KEY);
+
+  if (SUPABASE_URL && SUPABASE_ANON_KEY && SUPABASE_SERVICE_ROLE_KEY) {
     if (!supabaseAnon || !supabaseService) {
       try {
         supabaseAnon = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
           auth: { persistSession: false }
         });
 
-        // Use service role key for bypassing RLS on backend writes, fallback gracefully to anon key
-        const serviceKey = SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY;
-        supabaseService = createClient(SUPABASE_URL, serviceKey, {
+        supabaseService = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
           auth: { persistSession: false }
         });
 
         supabase = supabaseService;
-        console.log('[Supabase] Both Anon and Service Role clients initialized.');
+        console.log('[Supabase] Both Anon and Service Role clients successfully initialized.');
       } catch (err: any) {
         logSupabaseStatus('Client connection bypassed.', err.message);
         supabaseConnectionFailed = true;
