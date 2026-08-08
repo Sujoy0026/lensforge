@@ -199,10 +199,37 @@ app.post('/api/auth/signup', async (req, res) => {
     const normalizedEmail = email.trim().toLowerCase();
 
     const existingUsers = await getUsers();
-    if (
-      existingUsers.find((u) => u.email && u.email.toLowerCase() === normalizedEmail)
-    ) {
-      return res.status(400).json({ error: 'User already exists with this email' });
+    const existingUser = existingUsers.find((u) => u.email && u.email.toLowerCase() === normalizedEmail);
+    if (existingUser) {
+      let existsInAuth = false;
+      if (isSupabaseActive()) {
+        const supabaseServiceClient = getSupabaseServiceClient();
+        if (supabaseServiceClient) {
+          try {
+            const { data: listData } = await supabaseServiceClient.auth.admin.listUsers();
+            if (listData?.users?.some(u => u.email?.toLowerCase() === normalizedEmail)) {
+              existsInAuth = true;
+            }
+          } catch (e: any) {
+            console.error('[Signup Ghost Check Error]:', e.message);
+            existsInAuth = true;
+          }
+        } else {
+          existsInAuth = true;
+        }
+      } else {
+        existsInAuth = true;
+      }
+
+      if (existsInAuth) {
+        return res.status(400).json({ error: 'User already exists with this email' });
+      } else {
+        console.log(`[Signup] Found ghost database record for ${normalizedEmail} (not in Supabase Auth). Deleting ghost record to allow fresh signup.`);
+        if (isSupabaseActive()) {
+          const supabase = getSupabaseClient();
+          await supabase.from('users').delete().eq('id', existingUser.id);
+        }
+      }
     }
 
     const is_admin = normalizedEmail === 'sujoy.yt0077@gmail.com';
@@ -507,6 +534,40 @@ app.post('/api/auth/login', async (req, res) => {
       } else {
         user.password_hash = hashPassword(password);
         await updateUser(user);
+      }
+
+      // If they matched the database but we have active Supabase and they are not in Supabase Auth yet,
+      // let's auto-create them in Supabase Auth to heal the sync!
+      if (isSupabaseActive()) {
+        const supabaseServiceClient = getSupabaseServiceClient();
+        if (supabaseServiceClient) {
+          try {
+            const { data: listData } = await supabaseServiceClient.auth.admin.listUsers();
+            const existsInAuth = listData?.users?.some(u => u.email?.toLowerCase() === trimmedEmail);
+            if (!existsInAuth) {
+              console.log(`[Login Self-Healing] User ${trimmedEmail} exists in DB but not in Supabase Auth. Syncing to Supabase Auth...`);
+              const adminResult = await supabaseServiceClient.auth.admin.createUser({
+                email: trimmedEmail,
+                password: password,
+                email_confirm: true
+              });
+              if (!adminResult.error && adminResult.data?.user) {
+                console.log(`[Login Self-Healing] Successfully synced ${trimmedEmail} to Supabase Auth with ID: ${adminResult.data.user.id}`);
+                // Update the database record's ID to match Supabase Auth ID for consistency!
+                const oldId = user.id;
+                user.id = adminResult.data.user.id;
+                user.is_verified = true;
+                const supabase = getSupabaseClient();
+                await supabase.from('users').delete().eq('id', oldId);
+                await addUser(user);
+              } else if (adminResult.error) {
+                console.error('[Login Self-Healing Error]:', adminResult.error.message);
+              }
+            }
+          } catch (err: any) {
+            console.error('[Login Self-Healing Exception]:', err.message);
+          }
+        }
       }
     }
 
