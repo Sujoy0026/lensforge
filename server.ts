@@ -188,14 +188,15 @@ app.post('/api/auth/signup', async (req, res) => {
   try {
     const { email, password } = req.body ?? {};
 
-    if (typeof email !== 'string' || typeof password !== 'string') {
-      return res.status(400).json({ error: 'Email and password must be strings' });
+    if (typeof email !== 'string' || email.trim().length === 0) {
+      return res.status(400).json({ error: 'Email must be a non-empty string' });
+    }
+
+    if (typeof password !== 'string' || password.length === 0) {
+      return res.status(400).json({ error: 'Password must be a non-empty string' });
     }
 
     const normalizedEmail = email.trim().toLowerCase();
-    if (!normalizedEmail || !password) {
-      return res.status(400).json({ error: 'Email and password are required' });
-    }
 
     const existingUsers = await getUsers();
     if (
@@ -422,8 +423,12 @@ app.post('/api/auth/signup', async (req, res) => {
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body ?? {};
-    if (typeof email !== 'string' || typeof password !== 'string') {
-      return res.status(400).json({ error: 'Email and password must be strings' });
+    if (typeof email !== 'string' || email.trim().length === 0) {
+      return res.status(400).json({ error: 'Email must be a non-empty string' });
+    }
+
+    if (typeof password !== 'string' || password.length === 0) {
+      return res.status(400).json({ error: 'Password must be a non-empty string' });
     }
 
     const trimmedEmail = email.trim().toLowerCase();
@@ -590,8 +595,8 @@ app.get('/api/auth/verify-email', async (req, res) => {
 app.post('/api/auth/resend-verification', async (req, res) => {
   try {
     const { email } = req.body ?? {};
-    if (typeof email !== 'string') {
-      return res.status(400).json({ error: 'Email must be a string' });
+    if (typeof email !== 'string' || email.trim().length === 0) {
+      return res.status(400).json({ error: 'Email must be a non-empty string' });
     }
 
     const trimmedEmail = email.trim().toLowerCase();
