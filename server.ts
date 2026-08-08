@@ -185,56 +185,106 @@ function requireAdmin(req: express.Request, res: express.Response, next: express
 // --- Authentication ---
 app.post('/api/auth/signup', async (req, res) => {
   try {
-    const { email, password } = req.body;
-    if (!email || !password) {
+    const { email, password } = req.body ?? {};
+
+    if (typeof email !== 'string' || typeof password !== 'string') {
+      return res.status(400).json({ error: 'Email and password must be strings' });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail || !password) {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
     const existingUsers = await getUsers();
-    if (existingUsers.find((u) => u.email && u.email.toLowerCase() === email.toLowerCase())) {
+    if (
+      existingUsers.find((u) => u.email && u.email.toLowerCase() === normalizedEmail)
+    ) {
       return res.status(400).json({ error: 'User already exists with this email' });
     }
 
-    const is_admin = email.toLowerCase() === 'sujoy.yt0077@gmail.com';
-    let userId = 'u-' + crypto.randomUUID();
-    let isVerified = is_admin;
+    const is_admin = normalizedEmail === 'sujoy.yt0077@gmail.com';
+    const isVerifiedByAdmin = is_admin;
 
     if (isSupabaseActive()) {
-      try {
-        const supabase = getSupabaseClient();
-        const { data, error } = await supabase.auth.signUp({
-          email: email.toLowerCase(),
-          password: password,
+      const supabase = getSupabaseClient();
+
+      // IMPORTANT: if this fails, stop. Do not proceed with custom user creation
+      const { data, error } = await supabase.auth.signUp({
+        email: normalizedEmail,
+        password,
+      });
+
+      if (error || !data?.user) {
+        // Don’t bypass errors here in production—your flow will be inconsistent.
+        return res.status(400).json({
+          error: error?.message ?? 'Supabase signup failed',
         });
-
-        if (error) {
-          // If SMTP configuration in Supabase is broken, log and continue instead of blocking registration
-          if (error.message.includes('email') || error.message.includes('SMTP') || error.message.includes('confirmation')) {
-            console.warn('[Supabase Auth Signup Warning]: Bypassing Supabase SMTP config failure, proceeding with custom verification mechanism:', error.message);
-          } else {
-            return res.status(400).json({ error: error.message });
-          }
-        }
-
-        if (data && data.user) {
-          userId = data.user.id;
-          isVerified = data.user.email_confirmed_at ? true : is_admin;
-        }
-      } catch (err: any) {
-        console.error('[Supabase Auth Signup Error]:', err.message);
       }
+
+      const supabaseUserId = data.user.id; // this is what you should store in orders/user_id mapping
+
+      const isVerified = data.user.email_confirmed_at ? true : isVerifiedByAdmin;
+      
+      const verificationToken = crypto.randomBytes(32).toString('hex');
+      const isVerifiedSupported = existingUsers.length === 0 || ('is_verified' in existingUsers[0]);
+
+      const newUser: User = {
+        id: supabaseUserId,
+        email: normalizedEmail,
+        is_admin,
+        password_hash: hashPassword(password),
+        is_verified: isVerified || !isVerifiedSupported,
+        verification_token: (isVerified || !isVerifiedSupported) ? undefined : verificationToken,
+      };
+
+      await addUser(newUser);
+
+      if (newUser.is_verified || !isVerifiedSupported) {
+        const token = generateToken(newUser);
+        return res.status(200).json({
+          success: true,
+          userId: supabaseUserId,
+          verified: isVerified,
+          user: { id: newUser.id, email: newUser.email, is_admin: newUser.is_admin, is_verified: true },
+          token,
+          message: is_admin ? 'Signup successful! Welcome Admin.' : 'Signup successful! Welcome to LensForge.'
+        });
+      }
+
+      // Generate verification link
+      const appUrl = getAppUrl(req);
+      const verificationLink = `${appUrl}/api/auth/verify-email?token=${verificationToken}`;
+
+      const mailResult = await sendVerificationEmail({
+        email: newUser.email,
+        verificationLink,
+      });
+
+      return res.status(200).json({
+        success: true,
+        userId: supabaseUserId,
+        verified: isVerified,
+        user: { id: newUser.id, email: newUser.email, is_admin: newUser.is_admin, is_verified: false },
+        message: 'Signup successful! Please check your inbox for a verification email to activate your account.',
+        is_simulated: mailResult.simulated || !mailResult.success,
+        verification_link_simulated: (mailResult.simulated || !mailResult.success) ? verificationLink : null,
+        mail_error: mailResult.success ? null : mailResult.error
+      });
     }
 
+    // If Supabase is inactive, fall back to your custom system
+    const userId = 'u-' + crypto.randomUUID();
     const verificationToken = crypto.randomBytes(32).toString('hex');
     const isVerifiedSupported = existingUsers.length === 0 || ('is_verified' in existingUsers[0]);
 
     const newUser: User = {
       id: userId,
-      email: email.toLowerCase(),
+      email: normalizedEmail,
       is_admin,
       password_hash: hashPassword(password),
-      is_verified: isVerified || !isVerifiedSupported, // Auto-verify if database schema doesn't support the is_verified column
-      verification_token: (isVerified || !isVerifiedSupported) ? undefined : verificationToken,
+      is_verified: isVerifiedByAdmin || !isVerifiedSupported, // Auto-verify if database schema doesn't support the is_verified column
+      verification_token: (isVerifiedByAdmin || !isVerifiedSupported) ? undefined : verificationToken,
     };
 
     await addUser(newUser);
@@ -257,16 +307,17 @@ app.post('/api/auth/signup', async (req, res) => {
       verificationLink,
     });
 
-    res.json({
+    return res.json({
       user: { id: newUser.id, email: newUser.email, is_admin: newUser.is_admin, is_verified: false },
       message: 'Signup successful! Please check your inbox for a verification email to activate your account.',
       is_simulated: mailResult.simulated || !mailResult.success,
       verification_link_simulated: (mailResult.simulated || !mailResult.success) ? verificationLink : null,
       mail_error: mailResult.success ? null : mailResult.error
     });
+
   } catch (err: any) {
-    console.error('[Signup Endpoint Exception]:', err);
-    res.status(500).json({ error: 'Internal server error during signup', details: err.message || String(err) });
+    console.error('[Signup Route Error]:', err?.message ?? err);
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
