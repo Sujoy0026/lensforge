@@ -55,7 +55,10 @@ if (cleanUrl.endsWith('/')) {
 
 const SUPABASE_URL = cleanUrl;
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
+let supabaseAnon: any = null;
+let supabaseService: any = null;
 let supabase: any = null;
 let supabaseConnectionFailed = false;
 
@@ -82,25 +85,43 @@ export function isSupabaseActive(): boolean {
     return false;
   }
   if (SUPABASE_URL && SUPABASE_ANON_KEY) {
-    if (!supabase) {
+    if (!supabaseAnon || !supabaseService) {
       try {
-        supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        supabaseAnon = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
           auth: { persistSession: false }
         });
-        console.log('[Supabase] Connection client initialized.');
+
+        // Use service role key for bypassing RLS on backend writes, fallback gracefully to anon key
+        const serviceKey = SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY;
+        supabaseService = createClient(SUPABASE_URL, serviceKey, {
+          auth: { persistSession: false }
+        });
+
+        supabase = supabaseService;
+        console.log('[Supabase] Both Anon and Service Role clients initialized.');
       } catch (err: any) {
         logSupabaseStatus('Client connection bypassed.', err.message);
         supabaseConnectionFailed = true;
       }
     }
-    return !!supabase && !supabaseConnectionFailed;
+    return !!supabaseAnon && !!supabaseService && !supabaseConnectionFailed;
   }
   return false;
 }
 
 export function getSupabaseClient() {
   isSupabaseActive();
-  return supabase;
+  return supabaseAnon;
+}
+
+export function getSupabaseAnonClient() {
+  isSupabaseActive();
+  return supabaseAnon;
+}
+
+export function getSupabaseServiceClient() {
+  isSupabaseActive();
+  return supabaseService;
 }
 
 export function getSupabaseConfig() {
