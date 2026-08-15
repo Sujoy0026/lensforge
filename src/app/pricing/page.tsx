@@ -13,12 +13,13 @@ import {
   FolderArchive, 
   FileText, 
   ArrowRight,
-  Loader2
+  Loader2,
+  HelpCircle
 } from 'lucide-react';
 
 export default function PricingPage() {
   const router = useRouter();
-  const { user, isSubscribed, subscriptionTier, subscribeToPlan, cancelSubscription } = useAuth();
+  const { user, isSubscribed, subscriptionTier, subscribeToPlan } = useAuth();
   const [subscribing, setSubscribing] = useState<string | null>(null);
   const [billingCycle, setBillingCycle] = useState<'annual' | 'monthly'>('annual');
 
@@ -28,6 +29,35 @@ export default function PricingPage() {
     setSubscribing(null);
     router.push('/products');
   };
+
+  const faqs = [
+    {
+      q: 'What is your digital sales & refund policy?',
+      a: 'Because all products on LensForge (including master prompts, full Next.js source code ZIPs, and UI kits) are digital assets delivered and unlocked immediately upon purchase, all single purchases and subscription payments are final and non-refundable. We guarantee clean, production-verified TypeScript code with dedicated setup support.',
+      linkText: 'Read Commercial License & Policy →',
+      linkHref: '/license'
+    },
+    {
+      q: 'What happens to downloaded files if my All-Access subscription lapses?',
+      a: 'You keep every file you downloaded forever. All source code ZIPs, templates, and master prompts downloaded during your active pass remain permanently licensed for your personal and commercial projects. You only lose access to download newly dropped future releases after your pass ends.',
+    },
+    {
+      q: 'What does a one-time "lifetime access" single purchase include?',
+      a: 'When you purchase a single digital product without a subscription, you receive perpetual access to that item, including all future patches, bugfixes, and framework updates published for that asset version.',
+    },
+    {
+      q: 'Can I use these assets in client projects and commercial SaaS apps?',
+      a: 'Yes, 100%. All purchases include extended commercial rights. You can build and deploy unlimited client deliverables and charge paying customers for SaaS platforms built on our templates. The only restriction is you cannot resell the raw source code ZIP as a standalone template.',
+    },
+    {
+      q: 'How does 1-Click Prompt Copy and Source ZIP download work?',
+      a: 'Active subscribers see a green "Copy Prompt" button directly on product cards that copies production-ready markdown prompts to your clipboard instantly, plus a direct "Download ZIP" button for full source packages.',
+    },
+    {
+      q: 'What payment methods do you accept?',
+      a: 'We accept all major international credit/debit cards (Visa, Mastercard, American Express), Apple Pay, Google Pay, NetBanking, and UPI through our encrypted payment gateway.',
+    }
+  ];
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-16 space-y-16">
@@ -98,11 +128,11 @@ export default function PricingPage() {
               </li>
               <li className="flex items-center gap-2.5">
                 <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                <span>Commercial & Client Project License</span>
+                <span>Full Commercial & Client Project License</span>
               </li>
               <li className="flex items-center gap-2.5">
                 <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                <span>Access to all future releases while active</span>
+                <span>Keep downloaded code forever if paused</span>
               </li>
             </ul>
           </div>
@@ -168,7 +198,7 @@ export default function PricingPage() {
               </li>
               <li className="flex items-center gap-2.5">
                 <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                <span><strong>Priority Discord Support & Updates</strong></span>
+                <span><strong>100% Production-Verified Code & Support</strong></span>
               </li>
             </ul>
           </div>
@@ -201,23 +231,30 @@ export default function PricingPage() {
       </div>
 
       {/* FREQUENTLY ASKED QUESTIONS */}
-      <div className="max-w-3xl mx-auto space-y-6 pt-12 border-t border-white/10">
-        <h2 className="text-xl font-bold text-white text-center">Membership Questions</h2>
+      <div className="max-w-4xl mx-auto space-y-6 pt-12 border-t border-white/10">
+        <div className="text-center space-y-1">
+          <h2 className="text-2xl font-bold text-white tracking-tight flex items-center justify-center gap-2">
+            <HelpCircle className="w-5 h-5 text-cyan-400" /> Frequently Asked Questions
+          </h2>
+          <p className="text-slate-400 text-xs">Clear answers regarding licensing, refunds, and access rights</p>
+        </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-          <div className="bg-[#0e121e] border border-white/10 rounded-2xl p-5 space-y-2">
-            <h4 className="font-bold text-slate-100">Can I buy individual products without a subscription?</h4>
-            <p className="text-slate-400 leading-relaxed">
-              Yes! Every product can be purchased individually with a one-time payment for lifetime access to that specific item.
-            </p>
-          </div>
-
-          <div className="bg-[#0e121e] border border-white/10 rounded-2xl p-5 space-y-2">
-            <h4 className="font-bold text-slate-100">How does Copy Prompt & ZIP download work?</h4>
-            <p className="text-slate-400 leading-relaxed">
-              Active All-Access subscribers can instantly copy full master prompts to clipboard and download complete source ZIP files with 1 click directly on any product card.
-            </p>
-          </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs pt-4">
+          {faqs.map((faq, index) => (
+            <div key={index} className="bg-[#0e121e] border border-white/10 rounded-2xl p-6 space-y-2.5 flex flex-col justify-between">
+              <div className="space-y-2">
+                <h4 className="font-bold text-white text-sm leading-snug">{faq.q}</h4>
+                <p className="text-slate-400 leading-relaxed text-xs">{faq.a}</p>
+              </div>
+              {faq.linkHref && (
+                <div className="pt-2 border-t border-white/[0.06]">
+                  <Link href={faq.linkHref} className="text-cyan-400 hover:underline font-mono text-[11px] font-semibold">
+                    {faq.linkText}
+                  </Link>
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       </div>
 

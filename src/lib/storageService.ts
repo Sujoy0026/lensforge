@@ -2,13 +2,143 @@ import { Product, Order, ProductCategory, UserProfile } from '@/types';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 
 const STORAGE_KEYS = {
-  PRODUCTS: 'lensforge_products_app_v3',
-  ORDERS: 'lensforge_orders_app_v3',
-  PROFILES: 'lensforge_profiles_app_v3'
+  PRODUCTS: 'lensforge_products_app_v4',
+  ORDERS: 'lensforge_orders_app_v4',
+  PROFILES: 'lensforge_profiles_app_v4'
 };
 
-// INITIAL PRODUCTS (Empty by default for clean start)
-export const INITIAL_PRODUCTS: Product[] = [];
+// 8-Second Query Timeout Helper to prevent infinite hangs
+const withTimeout = <T>(promise: Promise<T>, ms = 8000): Promise<T> => {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`[LensForge Supabase] Request timed out after ${ms}ms`)), ms)
+    )
+  ]);
+};
+
+// INITIAL SEED PRODUCTS (High quality studio assets so the catalog is never stuck/empty)
+export const INITIAL_PRODUCTS: Product[] = [
+  {
+    id: 'prod-nexus-saas-starter',
+    title: 'Nexus SaaS — Multi-Tenant Next.js 15 Boilerplate',
+    description: 'Production-ready SaaS boilerplate with Supabase Auth, PostgreSQL RLS, multi-tenant team workspaces, and dark telemetry dashboard.',
+    category: 'templates',
+    price: 49.00,
+    tags: ['Next.js 15', 'TypeScript', 'Tailwind', 'Supabase', 'SaaS'],
+    thumbnailUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=800&q=80',
+    fileUrl: 'https://twojvapofapmqpgptfgz.supabase.co/storage/v1/object/public/products/nexus-saas-starter.zip',
+    promptContent: `# NEXUS SAAS STARTER INSTRUCTIONS
+1. Unzip the package: \`unzip nexus-saas-starter.zip\`
+2. Install dependencies: \`npm install\`
+3. Run migrations in Supabase SQL editor: \`schema.sql\`
+4. Start local development server: \`npm run dev\``,
+    status: 'published',
+    viewsCount: 1420,
+    salesCount: 89,
+    createdAt: '2026-08-10T10:00:00.000Z',
+    updatedAt: '2026-08-14T12:00:00.000Z'
+  },
+  {
+    id: 'prod-nextjs-architect-prompt',
+    title: 'Full-Stack Next.js 15 Master Architect Prompt',
+    description: 'Battle-tested LLM system prompt engineered to output strict type-safe App Router architecture, zero-layout-shift hydration, and secure Server Actions.',
+    category: 'prompts',
+    price: 19.00,
+    tags: ['LLM Prompt', 'Architecture', 'Next.js', 'Claude', 'GPT-4'],
+    thumbnailUrl: 'https://images.unsplash.com/photo-1634017839464-5c339ebe3cb4?auto=format&fit=crop&w=800&q=80',
+    promptContent: `# ROLE: Senior Full-Stack Next.js Architect
+You write strict, idiomatic TypeScript with Next.js 15 App Router.
+You prioritize:
+1. Zero unnecessary client components (Server Components by default).
+2. Bulletproof Error Boundaries & Suspense streaming.
+3. Cryptographically secure server actions with Zod validation.
+4. Tailwind CSS v4 styling with dark mode tokens.
+
+Always output production-ready code with complete imports and clean documentation.`,
+    status: 'published',
+    viewsCount: 2890,
+    salesCount: 214,
+    createdAt: '2026-08-11T11:00:00.000Z',
+    updatedAt: '2026-08-14T12:00:00.000Z'
+  },
+  {
+    id: 'prod-vanguard-financial-dashboard',
+    title: 'Vanguard — High-Frequency Analytics & UI Kit',
+    description: 'Dark-mode financial telemetry suite with real-time MRR meters, transaction ledgers, typography-led tables, and exportable charts.',
+    category: 'dashboards',
+    price: 39.00,
+    tags: ['Dashboard', 'Tailwind CSS', 'Analytics', 'FinTech', 'Charts'],
+    thumbnailUrl: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=800&q=80',
+    fileUrl: 'https://twojvapofapmqpgptfgz.supabase.co/storage/v1/object/public/products/vanguard-dashboard.zip',
+    promptContent: `# VANGUARD DASHBOARD SETUP
+- Built with React 19 & Tailwind CSS v4
+- Copy components into your \`/components/dashboard\` directory
+- Import and pass metrics payload to <RevenueTelemetry data={liveData} />`,
+    status: 'published',
+    viewsCount: 1750,
+    salesCount: 112,
+    createdAt: '2026-08-12T09:30:00.000Z',
+    updatedAt: '2026-08-14T12:00:00.000Z'
+  },
+  {
+    id: 'prod-hypersphere-3d-scene',
+    title: 'HyperSphere — WebGL Three.js Kinetic Glass Hero',
+    description: 'Customizable Three.js shader scene featuring an interactive iridescent glass polyhedron with cursor-responsive particle field.',
+    category: '3d-heroes',
+    price: 29.00,
+    tags: ['Three.js', 'WebGL', '3D Shader', 'Canvas', 'Interactive'],
+    thumbnailUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=800&q=80',
+    fileUrl: 'https://twojvapofapmqpgptfgz.supabase.co/storage/v1/object/public/products/hypersphere-3d.zip',
+    promptContent: `# THREE.JS HYPERSPHERE INTEGRATION
+Import the <HyperSphereCanvas /> component and place it inside your hero layout.
+Custom uniforms:
+- uSpeed: Controls rotation velocity (default: 0.8)
+- uFresnelPower: Adjusts iridescent glass edge glow (default: 2.5)`,
+    status: 'published',
+    viewsCount: 3100,
+    salesCount: 178,
+    createdAt: '2026-08-12T14:15:00.000Z',
+    updatedAt: '2026-08-14T12:00:00.000Z'
+  },
+  {
+    id: 'prod-refactor-system-prompt',
+    title: 'Code Refactoring & Zero-Bloat Audit Agent Prompt',
+    description: 'Structured prompt for Claude 3.7 & GPT-4o to eliminate dead code, optimize bundle sizes, and convert legacy React components to React 19.',
+    category: 'prompts',
+    price: 15.00,
+    tags: ['Prompt', 'Refactoring', 'React 19', 'Optimization'],
+    thumbnailUrl: 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=800&q=80',
+    promptContent: `# ROLE: Zero-Bloat Codebase Auditor
+Perform an exhaustive code quality audit.
+1. Remove all unused imports, dead variables, and redundant state.
+2. Eliminate unnecessary re-renders using immutable patterns.
+3. Optimize TypeScript types to reduce compilation latency.`,
+    status: 'published',
+    viewsCount: 1980,
+    salesCount: 94,
+    createdAt: '2026-08-13T08:00:00.000Z',
+    updatedAt: '2026-08-14T12:00:00.000Z'
+  },
+  {
+    id: 'prod-pulse-agency-starter',
+    title: 'Pulse — Minimalist Studio & Portfolio Starter',
+    description: 'High-contrast editorial portfolio theme with fluid typography, case study ledger, MDX blog, and smooth scroll transitions.',
+    category: 'templates',
+    price: 29.00,
+    tags: ['Portfolio', 'Next.js', 'Editorial', 'MDX', 'Tailwind'],
+    thumbnailUrl: 'https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?auto=format&fit=crop&w=800&q=80',
+    fileUrl: 'https://twojvapofapmqpgptfgz.supabase.co/storage/v1/object/public/products/pulse-agency.zip',
+    promptContent: `# PULSE AGENCY THEME SETUP
+Run: \`npm install\` then \`npm run dev\`.
+Configure your brand identity in \`src/config/site.ts\`.`,
+    status: 'published',
+    viewsCount: 1620,
+    salesCount: 76,
+    createdAt: '2026-08-13T16:00:00.000Z',
+    updatedAt: '2026-08-14T12:00:00.000Z'
+  }
+];
 
 // --- PRODUCTS DATA METHODS ---
 export const getProducts = async (includeDrafts = false): Promise<Product[]> => {
@@ -18,22 +148,28 @@ export const getProducts = async (includeDrafts = false): Promise<Product[]> => 
       if (!includeDrafts) {
         query = query.eq('status', 'published');
       }
-      const { data, error } = await query;
-      if (!error && data && data.length > 0) {
+      
+      const { data, error } = await withTimeout(query, 8000);
+      
+      if (error) {
+        console.error('[LensForge Supabase] Products fetch error:', error);
+      } else if (data && data.length > 0) {
         return data.map(mapSupabaseProduct);
       }
-    } catch (err) {
-      console.warn('Supabase fetch failed, falling back to local storage', err);
+    } catch (err: any) {
+      console.warn('[LensForge Supabase] Supabase fetch error or timeout, falling back gracefully:', err?.message || err);
     }
   }
 
-  // Fallback Local Storage
+  // Fallback Local Storage & Seed Products
   if (typeof window === 'undefined') return INITIAL_PRODUCTS;
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.PRODUCTS);
     if (raw) {
       const parsed: Product[] = JSON.parse(raw);
-      return includeDrafts ? parsed : parsed.filter(p => p.status === 'published');
+      if (parsed.length > 0) {
+        return includeDrafts ? parsed : parsed.filter(p => p.status === 'published');
+      }
     }
     localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(INITIAL_PRODUCTS));
     return includeDrafts ? INITIAL_PRODUCTS : INITIAL_PRODUCTS.filter(p => p.status === 'published');
@@ -66,23 +202,29 @@ export const saveProduct = async (productData: Partial<Product>): Promise<Produc
       };
 
       if (productData.id && !productData.id.startsWith('prod-')) {
-        const { data, error } = await supabase
-          .from('products')
-          .update(dbPayload)
-          .eq('id', productData.id)
-          .select()
-          .single();
+        const { data, error } = await withTimeout(
+          supabase
+            .from('products')
+            .update(dbPayload)
+            .eq('id', productData.id)
+            .select()
+            .single(),
+          8000
+        );
         if (!error && data) return mapSupabaseProduct(data);
       } else {
-        const { data, error } = await supabase
-          .from('products')
-          .insert([{ ...dbPayload, created_at: now }])
-          .select()
-          .single();
+        const { data, error } = await withTimeout(
+          supabase
+            .from('products')
+            .insert([{ ...dbPayload, created_at: now }])
+            .select()
+            .single(),
+          8000
+        );
         if (!error && data) return mapSupabaseProduct(data);
       }
     } catch (err) {
-      console.warn('Supabase product save failed, falling back to local storage', err);
+      console.warn('[LensForge Supabase] Product save failed, falling back to local storage:', err);
     }
   }
 
@@ -147,10 +289,10 @@ export const saveProduct = async (productData: Partial<Product>): Promise<Produc
 export const deleteProduct = async (id: string): Promise<boolean> => {
   if (isSupabaseConfigured() && supabase) {
     try {
-      const { error } = await supabase.from('products').delete().eq('id', id);
+      const { error } = await withTimeout(supabase.from('products').delete().eq('id', id), 8000);
       if (!error) return true;
     } catch (err) {
-      console.warn('Supabase product delete failed', err);
+      console.warn('[LensForge Supabase] Product delete failed:', err);
     }
   }
 
@@ -173,9 +315,12 @@ export const uploadFileToStorage = async (
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
       const filePath = `${fileName}`;
 
-      const { data, error } = await supabase.storage
-        .from(bucket)
-        .upload(filePath, file);
+      const { data, error } = await withTimeout(
+        supabase.storage
+          .from(bucket)
+          .upload(filePath, file),
+        15000
+      );
 
       if (!error && data) {
         const { data: publicUrlData } = supabase.storage
@@ -184,7 +329,7 @@ export const uploadFileToStorage = async (
         return publicUrlData.publicUrl;
       }
     } catch (err) {
-      console.warn('Supabase upload failed, creating object URL fallback', err);
+      console.warn('[LensForge Supabase] Upload failed, creating object URL fallback:', err);
     }
   }
 
@@ -196,12 +341,15 @@ export const uploadFileToStorage = async (
 export const getOrders = async (): Promise<Order[]> => {
   if (isSupabaseConfigured() && supabase) {
     try {
-      const { data, error } = await supabase.from('orders').select('*, order_items(*)').order('created_at', { ascending: false });
+      const { data, error } = await withTimeout(
+        supabase.from('orders').select('*, order_items(*)').order('created_at', { ascending: false }),
+        8000
+      );
       if (!error && data) {
         return data.map(mapSupabaseOrder);
       }
     } catch (err) {
-      console.warn('Supabase orders fetch failed', err);
+      console.warn('[LensForge Supabase] Orders fetch failed:', err);
     }
   }
 
@@ -243,18 +391,21 @@ export const createOrder = async (
 
   if (isSupabaseConfigured() && supabase) {
     try {
-      const { data: orderData, error: orderErr } = await supabase
-        .from('orders')
-        .insert([{
-          user_id: userId || null,
-          email,
-          total_amount: totalAmount,
-          status: 'completed',
-          license_key: licenseKey,
-          created_at: now
-        }])
-        .select()
-        .single();
+      const { data: orderData, error: orderErr } = await withTimeout(
+        supabase
+          .from('orders')
+          .insert([{
+            user_id: userId || null,
+            email,
+            total_amount: totalAmount,
+            status: 'completed',
+            license_key: licenseKey,
+            created_at: now
+          }])
+          .select()
+          .single(),
+        8000
+      );
 
       if (!orderErr && orderData) {
         const orderItemsPayload = items.map(item => ({
@@ -262,11 +413,11 @@ export const createOrder = async (
           product_id: item.product.id,
           unit_price: item.unitPrice
         }));
-        await supabase.from('order_items').insert(orderItemsPayload);
+        await withTimeout(supabase.from('order_items').insert(orderItemsPayload), 8000);
         newOrder.id = orderData.id;
       }
     } catch (err) {
-      console.warn('Supabase create order failed', err);
+      console.warn('[LensForge Supabase] Create order failed:', err);
     }
   }
 

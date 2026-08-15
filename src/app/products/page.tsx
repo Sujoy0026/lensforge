@@ -7,7 +7,7 @@ import { getProducts } from '@/lib/storageService';
 import ProductCard from '@/components/ProductCard';
 import ProductSkeleton from '@/components/ProductSkeleton';
 import EmptyState from '@/components/EmptyState';
-import { Search, SlidersHorizontal, Sparkles, X, ArrowUpDown } from 'lucide-react';
+import { Search, SlidersHorizontal, Sparkles, X, ArrowUpDown, AlertCircle, RefreshCw, Layers } from 'lucide-react';
 
 function ProductCatalogContent() {
   const searchParams = useSearchParams();
@@ -16,22 +16,30 @@ function ProductCatalogContent() {
 
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const [selectedCategory, setSelectedCategory] = useState<string>(initialCategory);
   const [searchQuery, setSearchQuery] = useState<string>(initialSearch);
   const [sortBy, setSortBy] = useState<string>('popular'); // 'popular' | 'price-asc' | 'price-desc' | 'newest'
+  const [onlyWithZip, setOnlyWithZip] = useState<boolean>(false);
 
-  useEffect(() => {
-    const fetchCatalog = async () => {
-      setLoading(true);
+  const fetchCatalog = async () => {
+    setLoading(true);
+    setErrorMessage(null);
+    try {
       const data = await getProducts();
       setProducts(data);
+    } catch (err: any) {
+      console.error('[LensForge Catalog] Failed to fetch catalog:', err);
+      setErrorMessage(err?.message || 'Unable to connect to product catalog. Please retry.');
+    } finally {
       setLoading(false);
-    };
+    }
+  };
+
+  useEffect(() => {
     fetchCatalog();
   }, []);
-
-  const [onlyWithZip, setOnlyWithZip] = useState<boolean>(false);
 
   const categories = [
     { id: 'all', label: 'All Assets' },
@@ -68,6 +76,9 @@ function ProductCatalogContent() {
       {/* HEADER TITLE */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-6 border-b border-white/10">
         <div>
+          <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 font-mono text-[10px] font-bold uppercase tracking-wider mb-2">
+            <Layers className="w-3 h-3" /> VERIFIED DIGITAL CATALOG
+          </div>
           <h1 className="text-3xl font-extrabold text-white tracking-tight">Browse Digital Products</h1>
           <p className="text-slate-400 text-xs mt-1">Explore master prompts, complete website templates, dashboards, and 3D assets</p>
         </div>
@@ -145,6 +156,23 @@ function ProductCatalogContent() {
         </div>
       </div>
 
+      {/* ERROR STATE */}
+      {errorMessage && (
+        <div className="p-6 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-center space-y-3 max-w-lg mx-auto my-8">
+          <div className="w-10 h-10 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center mx-auto">
+            <AlertCircle className="w-5 h-5" />
+          </div>
+          <h3 className="text-white font-bold text-sm">Failed to Load Catalog</h3>
+          <p className="text-slate-400 text-xs">{errorMessage}</p>
+          <button
+            onClick={fetchCatalog}
+            className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-cyan-400 text-slate-950 font-bold text-xs hover:bg-cyan-300 transition-colors shadow-lg shadow-cyan-400/20"
+          >
+            <RefreshCw className="w-3.5 h-3.5" /> Retry Fetch
+          </button>
+        </div>
+      )}
+
       {/* PRODUCTS GRID / SKELETON / EMPTY STATE */}
       {loading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -155,18 +183,19 @@ function ProductCatalogContent() {
           <ProductSkeleton />
           <ProductSkeleton />
         </div>
-      ) : filtered.length === 0 ? (
+      ) : !errorMessage && filtered.length === 0 ? (
         <EmptyState 
           icon={Search}
           title="No Matching Digital Assets"
-          description={`We couldn't find any products matching your query "${searchQuery}". Try searching for different keywords or resetting filters.`}
+          description={searchQuery ? `We couldn't find any products matching your query "${searchQuery}". Try searching for different keywords or resetting filters.` : 'No published products found in this category yet. New releases drop weekly.'}
           actionText="Reset All Filters"
           onAction={() => {
             setSearchQuery('');
             setSelectedCategory('all');
+            setOnlyWithZip(false);
           }}
         />
-      ) : (
+      ) : !errorMessage && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {filtered.map((product) => (
             <ProductCard key={product.id} product={product} />
@@ -180,7 +209,16 @@ function ProductCatalogContent() {
 
 export default function ProductCatalogPage() {
   return (
-    <Suspense fallback={<div className="max-w-7xl mx-auto px-6 py-12 text-slate-400 font-mono text-xs">Loading Catalog...</div>}>
+    <Suspense fallback={
+      <div className="max-w-7xl mx-auto px-6 py-12 space-y-8">
+        <div className="h-16 bg-white/[0.03] rounded-2xl animate-pulse" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          <ProductSkeleton />
+          <ProductSkeleton />
+          <ProductSkeleton />
+        </div>
+      </div>
+    }>
       <ProductCatalogContent />
     </Suspense>
   );
