@@ -12,6 +12,7 @@ interface AuthContextType {
   subscriptionTier: SubscriptionTier;
   signUp: (email: string, pass: string) => Promise<{ success: boolean; error?: string; requiresVerification?: boolean }>;
   signIn: (email: string, pass: string) => Promise<{ success: boolean; error?: string }>;
+  signInWithGoogle: () => Promise<{ success: boolean; error?: string }>;
   signOut: () => Promise<void>;
   requestPasswordReset: (email: string) => Promise<{ success: boolean; error?: string; message?: string }>;
   updatePassword: (newPassword: string) => Promise<{ success: boolean; error?: string }>;
@@ -242,6 +243,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  // SIGN IN WITH GOOGLE OAUTH
+  const signInWithGoogle = async (): Promise<{ success: boolean; error?: string }> => {
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        const origin = typeof window !== 'undefined' ? window.location.origin : 'https://lensforge.online';
+        const { data, error } = await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            redirectTo: `${origin}/auth/callback`
+          }
+        });
+        if (error) {
+          return { success: false, error: error.message };
+        }
+        return { success: true };
+      } catch (err: any) {
+        return { success: false, error: err?.message || 'Google sign in failed.' };
+      }
+    } else {
+      // Local demo fallback
+      const googleDemoUser: UserProfile = {
+        id: `usr-google-${Date.now()}`,
+        email: 'developer@gmail.com',
+        role: 'customer',
+        subscriptionTier: 'none',
+        purchasedProductIds: [],
+        createdAt: new Date().toISOString(),
+        isVerified: true
+      };
+      saveLocalUser(googleDemoUser);
+      return { success: true };
+    }
+  };
+
   // SIGN OUT
   const signOut = async () => {
     if (isSupabaseConfigured() && supabase) {
@@ -390,6 +425,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         subscriptionTier: user?.subscriptionTier || 'none',
         signUp,
         signIn,
+        signInWithGoogle,
         signOut,
         requestPasswordReset,
         updatePassword,
