@@ -3,12 +3,13 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Product } from '@/types';
-import { getProducts, saveProduct, deleteProduct } from '@/lib/storageService';
-import { Plus, Search, Edit3, Trash2, Eye, EyeOff, Loader2, RefreshCw } from 'lucide-react';
+import { getProducts, saveProduct, deleteProduct, clearAllProducts } from '@/lib/storageService';
+import { Plus, Search, Edit3, Trash2, Eye, EyeOff, Loader2, RefreshCw, AlertTriangle } from 'lucide-react';
 
 export default function AdminProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
@@ -32,8 +33,18 @@ export default function AdminProductsPage() {
 
   const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to permanently delete this product?')) {
+      setDeletingId(id);
       await deleteProduct(id);
-      fetchCatalog();
+      setDeletingId(null);
+      await fetchCatalog();
+    }
+  };
+
+  const handleClearAll = async () => {
+    if (confirm('WARNING: This will permanently delete ALL products in the catalog. Are you sure?')) {
+      setLoading(true);
+      await clearAllProducts();
+      await fetchCatalog();
     }
   };
 
@@ -58,12 +69,24 @@ export default function AdminProductsPage() {
           <p className="text-slate-400 text-xs mt-1">Manage digital product uploads, draft vs live status, pricing, and downloads</p>
         </div>
 
-        <Link
-          href="/admin/products/new"
-          className="px-4 py-2 rounded-full bg-cyan-400 text-slate-950 font-bold text-xs hover:bg-cyan-300 transition-colors flex items-center gap-1.5 shadow-lg shadow-cyan-400/20"
-        >
-          <Plus className="w-4 h-4" /> Upload New Asset
-        </Link>
+        <div className="flex items-center gap-3">
+          {products.length > 0 && (
+            <button
+              onClick={handleClearAll}
+              className="px-3.5 py-2 rounded-full bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-mono font-bold transition-colors flex items-center gap-1.5"
+              title="Delete all products"
+            >
+              <Trash2 className="w-3.5 h-3.5" /> Wipe All ({products.length})
+            </button>
+          )}
+
+          <Link
+            href="/admin/products/new"
+            className="px-4 py-2 rounded-full bg-cyan-400 text-slate-950 font-bold text-xs hover:bg-cyan-300 transition-colors flex items-center gap-1.5 shadow-lg shadow-cyan-400/20"
+          >
+            <Plus className="w-4 h-4" /> Upload New Asset
+          </Link>
+        </div>
       </div>
 
       {/* FILTER & SEARCH BAR */}
@@ -107,7 +130,7 @@ export default function AdminProductsPage() {
 
         <button 
           onClick={fetchCatalog}
-          className="p-2 rounded-xl bg-white/[0.04] border border-white/10 text-slate-300 hover:text-white"
+          className="p-2 rounded-xl bg-white/[0.04] border border-white/10 text-slate-300 hover:text-white transition-colors"
           title="Refresh List"
         >
           <RefreshCw className="w-3.5 h-3.5" />
@@ -121,8 +144,14 @@ export default function AdminProductsPage() {
           <Loader2 className="w-4 h-4 animate-spin" /> Loading Product Catalog...
         </div>
       ) : filteredProducts.length === 0 ? (
-        <div className="bg-[#0e121e] border border-white/10 rounded-2xl p-12 text-center text-slate-400 text-xs">
-          No products found matching your filters.
+        <div className="bg-[#0e121e] border border-white/10 rounded-2xl p-12 text-center text-slate-400 text-xs space-y-3">
+          <p>No products found in catalog.</p>
+          <Link
+            href="/admin/products/new"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-cyan-400 text-slate-950 font-bold text-xs hover:bg-cyan-300 transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5" /> Add Your First Product
+          </Link>
         </div>
       ) : (
         <div className="bg-[#0e121e] border border-white/10 rounded-2xl overflow-hidden">
@@ -132,8 +161,6 @@ export default function AdminProductsPage() {
                 <tr className="bg-white/[0.02] text-slate-400 border-b border-white/10 font-mono text-[11px]">
                   <th className="p-4">PRODUCT ASSET</th>
                   <th className="p-4">CATEGORY</th>
-                  <th className="p-4">PRICE</th>
-                  <th className="p-4">SALES</th>
                   <th className="p-4">STATUS</th>
                   <th className="p-4 text-right">ACTIONS</th>
                 </tr>
@@ -164,14 +191,6 @@ export default function AdminProductsPage() {
                       {product.category.replace('-', ' ')}
                     </td>
 
-                    <td className="p-4 font-mono font-bold text-cyan-400">
-                      ${product.price.toFixed(2)}
-                    </td>
-
-                    <td className="p-4 font-mono text-slate-300">
-                      {product.salesCount} sold
-                    </td>
-
                     <td className="p-4">
                       <button
                         onClick={() => handleToggleStatus(product)}
@@ -199,10 +218,15 @@ export default function AdminProductsPage() {
 
                         <button
                           onClick={() => handleDelete(product.id)}
-                          className="p-1.5 rounded-lg bg-white/[0.05] hover:bg-rose-500/20 text-slate-300 hover:text-rose-400 border border-white/10 transition-colors"
+                          disabled={deletingId === product.id}
+                          className="p-1.5 rounded-lg bg-white/[0.05] hover:bg-rose-500/20 text-slate-300 hover:text-rose-400 border border-white/10 transition-colors disabled:opacity-50"
                           title="Delete Product"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          {deletingId === product.id ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-rose-400" />
+                          ) : (
+                            <Trash2 className="w-3.5 h-3.5" />
+                          )}
                         </button>
                       </div>
                     </td>
