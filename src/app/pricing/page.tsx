@@ -32,30 +32,30 @@ export default function PricingPage() {
 
   const faqs = [
     {
-      q: 'What is your digital sales & refund policy?',
-      a: 'Because all products on LensForge (including master prompts, full Next.js source code ZIPs, and UI kits) are digital assets delivered and unlocked immediately upon purchase, all single purchases and subscription payments are final and non-refundable. We guarantee clean, production-verified TypeScript code with dedicated setup support.',
-      linkText: 'Read Commercial License & Policy →',
-      linkHref: '/license'
+      q: 'How does the All-Access Pass work?',
+      a: 'LensForge operates exclusively on an All-Access Pass subscription ($29/mo or $199/yr). Once active, you get immediate, unrestricted access to copy every master prompt and download full source code ZIP packages for every product in our repository with zero per-item fees.',
+    },
+    {
+      q: 'Can I purchase individual products without a subscription?',
+      a: 'No. To provide developers and studios maximum value and continuous updates, our entire catalog is unified under the All-Access Pass. A single subscription grants you full access to all website templates, dashboards, 3D scenes, and master prompts.',
     },
     {
       q: 'What happens to downloaded files if my All-Access subscription lapses?',
-      a: 'You keep every file you downloaded forever. All source code ZIPs, templates, and master prompts downloaded during your active pass remain permanently licensed for your personal and commercial projects. You only lose access to download newly dropped future releases after your pass ends.',
-    },
-    {
-      q: 'What does a one-time "lifetime access" single purchase include?',
-      a: 'When you purchase a single digital product without a subscription, you receive perpetual access to that item, including all future patches, bugfixes, and framework updates published for that asset version.',
+      a: 'You keep every file and codebase you downloaded forever. All source code ZIPs, templates, and master prompts downloaded during your active pass remain permanently licensed for your personal and commercial projects. You only lose access to download newly dropped future releases after your pass ends.',
     },
     {
       q: 'Can I use these assets in client projects and commercial SaaS apps?',
-      a: 'Yes, 100%. All purchases include extended commercial rights. You can build and deploy unlimited client deliverables and charge paying customers for SaaS platforms built on our templates. The only restriction is you cannot resell the raw source code ZIP as a standalone template.',
+      a: 'Yes, 100%. All plans include full commercial rights. You can build and deploy unlimited client deliverables and charge paying customers for SaaS platforms built on our templates. The only restriction is you cannot resell the raw source code ZIP as a standalone template.',
     },
     {
       q: 'How does 1-Click Prompt Copy and Source ZIP download work?',
-      a: 'Active subscribers see a green "Copy Prompt" button directly on product cards that copies production-ready markdown prompts to your clipboard instantly, plus a direct "Download ZIP" button for full source packages.',
+      a: 'Active subscribers see an instant "Copy Prompt" button directly on product cards that copies production-ready markdown prompts to your clipboard, plus a direct "Download ZIP" button for full source packages.',
     },
     {
-      q: 'What payment methods do you accept?',
-      a: 'We accept all major international credit/debit cards (Visa, Mastercard, American Express), Apple Pay, Google Pay, NetBanking, and UPI through our encrypted payment gateway.',
+      q: 'What is your digital sales & refund policy?',
+      a: 'Because all products on LensForge are digital goods unlocked immediately upon subscription activation, all subscription payments are final and non-refundable. We guarantee clean, production-verified TypeScript code with dedicated technical setup support.',
+      linkText: 'Read Commercial License & Policy →',
+      linkHref: '/license'
     }
   ];
 

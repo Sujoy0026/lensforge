@@ -97,19 +97,17 @@ export default function Header() {
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
           </form>
 
-          {/* CART BUTTON WITH LABEL & COUNT BADGE */}
+          {/* ALL-ACCESS MEMBERSHIP STATUS / CTA BUTTON */}
           <Link 
-            href="/cart"
-            className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.05] border border-white/10 hover:border-cyan-400/40 text-slate-200 text-xs font-semibold relative transition-all"
-            title="View Shopping Cart"
+            href="/pricing"
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold font-mono transition-all ${
+              isSubscribed 
+                ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                : 'bg-gradient-to-r from-cyan-400 to-teal-400 text-slate-950 font-bold shadow-md shadow-cyan-400/20 hover:from-cyan-300 hover:to-teal-300'
+            }`}
           >
-            <ShoppingBag className="w-4 h-4 text-cyan-400" />
-            <span className="hidden sm:inline">Cart</span>
-            {cartCount > 0 && (
-              <span className="bg-cyan-400 text-slate-950 font-mono font-extrabold text-[10px] px-1.5 py-0.2 rounded-full min-w-4 text-center leading-tight">
-                {cartCount}
-              </span>
-            )}
+            <Zap className="w-3.5 h-3.5" />
+            <span>{isSubscribed ? 'All-Access Active' : 'Get All-Access'}</span>
           </Link>
 
           {/* USER ACCOUNT DROPDOWN / SIGN IN & REGISTER */}

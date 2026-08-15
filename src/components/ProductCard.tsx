@@ -4,30 +4,26 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { Product } from '@/types';
 import { useAuth } from '@/lib/AuthContext';
-import { useCart } from '@/lib/CartContext';
 import UnlockModal from '@/components/UnlockModal';
 import { 
   Copy, 
   Check, 
-  FileText, 
   Download, 
   Lock, 
-  ShoppingBag, 
   Eye, 
   FolderArchive,
+  Zap,
   Sparkles
 } from 'lucide-react';
 
 export default function ProductCard({ product }: { product: Product }) {
   const { hasAccessToProduct, isSubscribed } = useAuth();
-  const { addToCart, isInCart } = useCart();
   
   const [copied, setCopied] = useState(false);
   const [unlockModalOpen, setUnlockModalOpen] = useState(false);
   const [unlockType, setUnlockType] = useState<'prompt' | 'zip' | 'general'>('general');
 
   const hasAccess = hasAccessToProduct(product.id);
-  const isAdded = isInCart(product.id);
   const hasZip = Boolean(product.fileUrl && product.fileUrl.trim().length > 0);
   const hasPrompt = Boolean(product.promptContent && product.promptContent.trim().length > 0) || product.category === 'prompts';
 
@@ -110,11 +106,11 @@ export default function ProductCard({ product }: { product: Product }) {
             </div>
           )}
 
-          {/* UNLOCKED BADGE (IF SUBSCRIBED OR PURCHASED) */}
+          {/* UNLOCKED BADGE (IF SUBSCRIBED) */}
           {hasAccess && (
             <div className="absolute bottom-3 left-3">
               <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1 backdrop-blur-md">
-                <Check className="w-3 h-3 text-emerald-400" /> Unlocked
+                <Check className="w-3 h-3 text-emerald-400" /> Member Access
               </span>
             </div>
           )}
@@ -147,7 +143,7 @@ export default function ProductCard({ product }: { product: Product }) {
                         ? 'bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 border-purple-500/30'
                         : 'bg-white/[0.04] hover:bg-purple-500/15 text-slate-300 hover:text-purple-300 border-white/10'
                   }`}
-                  title={hasAccess ? 'Copy Master Prompt text to clipboard' : 'Unlock to copy full Master Prompt'}
+                  title={hasAccess ? 'Copy Master Prompt text to clipboard' : 'Subscribe to copy full Master Prompt'}
                 >
                   {copied ? (
                     <>
@@ -175,7 +171,7 @@ export default function ProductCard({ product }: { product: Product }) {
                       ? 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border-amber-500/30'
                       : 'bg-white/[0.04] hover:bg-amber-500/15 text-slate-300 hover:text-amber-300 border-white/10'
                   }`}
-                  title={hasAccess ? 'Download complete ZIP package' : 'Unlock to download source ZIP'}
+                  title={hasAccess ? 'Download complete ZIP package' : 'Subscribe to download source ZIP'}
                 >
                   {hasAccess ? (
                     <>
@@ -193,10 +189,11 @@ export default function ProductCard({ product }: { product: Product }) {
             </div>
           </div>
 
-          {/* BOTTOM PRICE & CART BUTTON */}
+          {/* BOTTOM ACCESS & SUBSCRIPTION CTA */}
           <div className="pt-4 border-t border-white/[0.08] flex items-center justify-between">
-            <div className="font-extrabold text-lg text-cyan-400">
-              ${product.price.toFixed(2)}
+            <div className="flex items-center gap-1.5 text-cyan-400 font-mono text-xs font-bold">
+              <Zap className="w-3.5 h-3.5 fill-cyan-400/20" />
+              <span>All-Access Pass</span>
             </div>
 
             <div className="flex items-center gap-2">
@@ -211,21 +208,19 @@ export default function ProductCard({ product }: { product: Product }) {
               {hasAccess ? (
                 <Link
                   href={`/products/${product.id}`}
-                  className="px-3 py-2 rounded-lg font-bold text-xs flex items-center gap-1.5 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30 transition-all"
+                  className="px-3.5 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1.5 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30 transition-all"
                 >
-                  <Check className="w-3.5 h-3.5" /> Access
+                  <Check className="w-3.5 h-3.5" /> Unlocked
                 </Link>
               ) : (
                 <button
-                  onClick={() => addToCart(product)}
-                  className={`px-3 py-2 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-all ${
-                    isAdded 
-                      ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                      : 'bg-cyan-400 hover:bg-cyan-300 text-slate-950 shadow-md shadow-cyan-400/20'
-                  }`}
+                  onClick={() => {
+                    setUnlockType('general');
+                    setUnlockModalOpen(true);
+                  }}
+                  className="px-3.5 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1.5 bg-cyan-400 hover:bg-cyan-300 text-slate-950 shadow-md shadow-cyan-400/20 transition-all"
                 >
-                  {isAdded ? <Check className="w-3.5 h-3.5" /> : <ShoppingBag className="w-3.5 h-3.5" />}
-                  {isAdded ? 'Added' : 'Buy Now'}
+                  <Zap className="w-3.5 h-3.5" /> Unlock
                 </button>
               )}
             </div>
